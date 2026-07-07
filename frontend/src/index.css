@@ -1,0 +1,249 @@
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap");
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Dark editorial design system for high-converting AI course landing page */
+
+@layer base {
+  :root {
+    --background: 0 0% 8%;
+    --foreground: 0 0% 98%;
+
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 0 0% 11%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 24 95% 53%;
+    --primary-foreground: 0 0% 2%;
+
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 24 95% 53%;
+    --accent-foreground: 0 0% 2%;
+
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 20%;
+    --input: 0 0% 15%;
+    --ring: 24 95% 53%;
+
+    --radius: 0.5rem;
+
+    --sidebar-background: 0 0% 10%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 24 95% 53%;
+    --sidebar-primary-foreground: 0 0% 2%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 20%;
+    --sidebar-ring: 24 95% 53%;
+
+    --chart-1: 24 95% 53%;
+    --chart-2: 24 85% 45%;
+    --chart-3: 24 75% 40%;
+    --chart-4: 0 0% 50%;
+    --chart-5: 0 0% 35%;
+
+    --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  .dark {
+    --background: 0 0% 8%;
+    --foreground: 0 0% 98%;
+
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 0 0% 11%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 24 95% 53%;
+    --primary-foreground: 0 0% 2%;
+
+    --secondary: 0 0% 15%;
+    --secondary-foreground: 0 0% 98%;
+
+    --muted: 0 0% 20%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 24 95% 53%;
+    --accent-foreground: 0 0% 2%;
+
+    --destructive: 0 72% 50%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 0 0% 20%;
+    --input: 0 0% 15%;
+    --ring: 24 95% 53%;
+
+    --sidebar-background: 0 0% 10%;
+    --sidebar-foreground: 0 0% 98%;
+    --sidebar-primary: 24 95% 53%;
+    --sidebar-primary-foreground: 0 0% 2%;
+    --sidebar-accent: 0 0% 15%;
+    --sidebar-accent-foreground: 0 0% 98%;
+    --sidebar-border: 0 0% 20%;
+    --sidebar-ring: 24 95% 53%;
+
+    --chart-1: 24 95% 53%;
+    --chart-2: 24 85% 45%;
+    --chart-3: 24 75% 40%;
+    --chart-4: 0 0% 50%;
+    --chart-5: 0 0% 35%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    background-image: 
+      radial-gradient(circle at 1px 1px, hsl(0 0% 18%) 1px, transparent 0);
+    background-size: 40px 40px;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+}
+
+@layer utilities {
+  .text-gradient {
+    @apply bg-gradient-to-r from-primary to-primary bg-clip-text text-transparent;
+  }
+}
+
+/* Hero light ray animations */
+@keyframes ray-sway-1 {
+  0%, 100% {
+    transform: translateX(-50%) rotate(-25deg);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateX(-50%) rotate(-23deg);
+    opacity: 1;
+  }
+}
+
+@keyframes ray-sway-2 {
+  0%, 100% {
+    transform: translateX(-50%) rotate(-8deg);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateX(-50%) rotate(-6deg);
+    opacity: 1;
+  }
+}
+
+@keyframes ray-sway-3 {
+  0%, 100% {
+    transform: translateX(-50%) rotate(12deg);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateX(-50%) rotate(14deg);
+    opacity: 1;
+  }
+}
+
+@keyframes ray-sway-4 {
+  0%, 100% {
+    transform: translateX(-50%) rotate(-42deg);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translateX(-50%) rotate(-40deg);
+    opacity: 0.95;
+  }
+}
+
+@keyframes ray-sway-5 {
+  0%, 100% {
+    transform: translateX(-50%) rotate(35deg);
+    opacity: 0.88;
+  }
+  50% {
+    transform: translateX(-50%) rotate(37deg);
+    opacity: 0.98;
+  }
+}
+
+@keyframes ray-sway-6 {
+  0%, 100% {
+    transform: translateX(-50%) rotate(-58deg);
+    opacity: 0.8;
+  }
+  50% {
+    transform: translateX(-50%) rotate(-56deg);
+    opacity: 0.92;
+  }
+}
+
+@keyframes glow-breathe {
+  0%, 100% {
+    opacity: 0.85;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+}
+
+.animate-ray-sway-1 {
+  animation: ray-sway-1 25s ease-in-out infinite;
+}
+
+.animate-ray-sway-2 {
+  animation: ray-sway-2 30s ease-in-out infinite;
+  animation-delay: -5s;
+}
+
+.animate-ray-sway-3 {
+  animation: ray-sway-3 28s ease-in-out infinite;
+  animation-delay: -10s;
+}
+
+.animate-ray-sway-4 {
+  animation: ray-sway-4 32s ease-in-out infinite;
+  animation-delay: -8s;
+}
+
+.animate-ray-sway-5 {
+  animation: ray-sway-5 27s ease-in-out infinite;
+  animation-delay: -12s;
+}
+
+.animate-ray-sway-6 {
+  animation: ray-sway-6 35s ease-in-out infinite;
+  animation-delay: -3s;
+}
+
+.animate-glow-breathe {
+  animation: glow-breathe 20s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.8s ease-in-out infinite;
+}

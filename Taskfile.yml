@@ -1,0 +1,105 @@
+version: "3"
+
+vars:
+  BACKEND_DIR: backend
+  FRONTEND_DIR: frontend
+
+tasks:
+  default:
+    desc: List all available tasks
+    cmds:
+      - task --list-all
+
+  # ---------------------------------------------------------------------
+  # Setup
+  # ---------------------------------------------------------------------
+  install:
+    desc: Install dependencies for both backend and frontend
+    cmds:
+      - task: backend:install
+      - task: frontend:install
+
+  # ---------------------------------------------------------------------
+  # Backend (FastAPI, managed with uv)
+  # ---------------------------------------------------------------------
+  backend:install:
+    desc: Install backend Python dependencies with uv
+    dir: "{{.BACKEND_DIR}}"
+    cmds:
+      - uv sync
+
+  backend:dev:
+    desc: Run the FastAPI backend with auto-reload (http://localhost:8000)
+    dir: "{{.BACKEND_DIR}}"
+    cmds:
+      - uv run uvicorn app.main:app --reload --port 8000
+
+  backend:test:
+    desc: Run the backend test suite (pytest)
+    dir: "{{.BACKEND_DIR}}"
+    cmds:
+      - uv run pytest -q
+
+  # ---------------------------------------------------------------------
+  # Worker (Phase 2 RQ worker)
+  # ---------------------------------------------------------------------
+  worker:dev:
+    desc: Run the Phase 2 RQ worker (consumes repo_scan_queue)
+    dir: "{{.BACKEND_DIR}}"
+    cmds:
+      - uv run python run_worker.py
+
+  dev:
+    desc: Run backend, worker, and frontend dev servers concurrently
+    dir: "{{.FRONTEND_DIR}}"
+    cmds:
+      - npx concurrently -k -n backend,worker,frontend -c blue,magenta,green
+        "cd ../{{.BACKEND_DIR}} && uv run uvicorn app.main:app --reload --port 8000"
+        "cd ../{{.BACKEND_DIR}} && uv run python run_worker.py"
+        "npm run dev"
+
+  # ---------------------------------------------------------------------
+  # Frontend (Vite + React)
+  # ---------------------------------------------------------------------
+  frontend:install:
+    desc: Install frontend Node dependencies
+    dir: "{{.FRONTEND_DIR}}"
+    cmds:
+      - npm install --legacy-peer-deps
+
+  frontend:dev:
+    desc: Run the frontend dev server (http://localhost:8080)
+    dir: "{{.FRONTEND_DIR}}"
+    cmds:
+      - npm run dev
+
+  frontend:build:
+    desc: Build the frontend for production
+    dir: "{{.FRONTEND_DIR}}"
+    cmds:
+      - npm run build
+
+  frontend:preview:
+    desc: Preview the production frontend build
+    dir: "{{.FRONTEND_DIR}}"
+    cmds:
+      - npm run preview
+
+  frontend:lint:
+    desc: Lint the frontend with eslint
+    dir: "{{.FRONTEND_DIR}}"
+    cmds:
+      - npm run lint
+
+  # ---------------------------------------------------------------------
+  # Aggregate
+  # ---------------------------------------------------------------------
+  test:
+    desc: Run all test suites
+    cmds:
+      - task: backend:test
+
+  lint:
+    desc: Run all linters
+    cmds:
+      - task: frontend:lint

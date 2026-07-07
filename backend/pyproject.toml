@@ -1,0 +1,31 @@
+[project]
+name = "code-quality-intelligence-backend"
+version = "0.1.0"
+description = "Phase 1 backend: GitHub repo ingestion and scan queueing"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "httpx>=0.27.0",
+    "pydantic-settings>=2.4.0",
+    "supabase>=2.7.0",
+    "rq>=1.16.0",
+    "redis>=5.0.0",
+    "tree-sitter>=0.23.0",
+    "tree-sitter-language-pack>=0.2.0",
+    "qdrant-client>=1.11.0",
+    "neo4j>=5.24.0",
+    "langgraph>=0.2.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-mock>=3.14.0",
+    "respx>=0.21.0",
+    "pytest-asyncio>=0.24.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+asyncio_mode = "auto"

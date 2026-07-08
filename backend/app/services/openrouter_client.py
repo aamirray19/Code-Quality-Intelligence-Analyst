@@ -1,3 +1,4 @@
+import asyncio
 from typing import Protocol
 
 import httpx
@@ -46,14 +47,22 @@ class OpenRouterClient:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
+            "max_tokens": 4096,
         }
 
         try:
-            async with httpx.AsyncClient(timeout=self._timeout) as client:
-                response = await client.post(OPENROUTER_URL, headers=headers, json=payload)
-                response.raise_for_status()
-                data = response.json()
-        except (httpx.HTTPError, ValueError) as exc:
+            # httpx's per-operation timeout resets on any trickle of bytes
+            # (e.g. OpenRouter's keep-alive during a long generation), so it
+            # doesn't cap total call duration. wait_for enforces a hard
+            # wall-clock deadline on top of it.
+            async def _post() -> httpx.Response:
+                async with httpx.AsyncClient(timeout=self._timeout) as client:
+                    return await client.post(OPENROUTER_URL, headers=headers, json=payload)
+
+            response = await asyncio.wait_for(_post(), timeout=self._timeout)
+            response.raise_for_status()
+            data = response.json()
+        except (httpx.HTTPError, ValueError, asyncio.TimeoutError) as exc:
             raise AppError("LLM_REQUEST_FAILED", f"OpenRouter request failed: {exc}", 502) from exc
 
         try:

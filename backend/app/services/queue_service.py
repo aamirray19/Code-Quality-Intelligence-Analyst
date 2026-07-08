@@ -30,7 +30,19 @@ def enqueue_scan(scan: ScanRecord, repo: ValidatedRepository) -> str:
     try:
         connection = get_redis_connection()
         queue = Queue(settings.redis_queue_name, connection=connection)
-        job = queue.enqueue("app.workers.jobs.process_repo_scan", payload)
+        # RQ's default job_timeout (180s) is far shorter than a full scan can
+        # legitimately take: phase 3 alone runs up to 5 concurrent LLM agents,
+        # each allowed AGENT_TIMEOUT_SECONDS * (AGENT_MAX_RETRIES + 1). RQ
+        # force-kills the job at the timeout via an async exception that can
+        # strike anywhere in the call stack, bypassing this app's own
+        # try/except error handling and leaving the scan stuck "running"
+        # forever with no recorded failure.
+        job_timeout = max(
+            1800, settings.agent_timeout_seconds * (settings.agent_max_retries + 1) * 6
+        )
+        job = queue.enqueue(
+            "app.workers.jobs.process_repo_scan", payload, job_timeout=job_timeout
+        )
     except Exception as exc:
         raise AppError("QUEUE_ERROR", "Failed to queue scan job.", 500) from exc
 

@@ -157,43 +157,50 @@ async def run_agent(agent_name: str, worker_input: dict) -> dict:
     so analysis_tasks/agent_runs rows are attributed correctly."""
     scan_id = worker_input["scan_id"]
     task = worker_input["task"]
-
-    await asyncio.to_thread(_mark_task_running, task["task_id"])
-
-    context = await asyncio.to_thread(_gather_context, scan_id, task)
-    system_prompt = f"{AGENT_PROMPTS[agent_name]}\n\n{RESPONSE_FORMAT_INSTRUCTIONS}"
-    user_prompt = json.dumps(context)
-
-    client = build_llm_client(agent_name)
     last_error: str | None = None
+    client = None
 
-    for _ in range(settings.agent_max_retries + 1):
-        try:
-            raw = await client.complete(system=system_prompt, user=user_prompt)
-            parsed = json.loads(raw)
-            validated = AgentOutputList(findings=parsed if isinstance(parsed, list) else [])
-            findings = [f.model_dump() for f in validated.findings][: settings.max_findings_per_agent]
-            for finding in findings:
-                finding["agent"] = agent_name
+    try:
+        await asyncio.to_thread(_mark_task_running, task["task_id"])
 
-            await asyncio.to_thread(
-                _record_agent_run,
-                scan_id,
-                agent_name,
-                task,
-                "completed",
-                None,
-                model_provider="openrouter",
-                model_name=settings.agent_llm_model,
-                usage=client.last_usage,
-                findings_count=len(findings),
-            )
-            await asyncio.to_thread(_mark_task_completed, task["task_id"])
-            return {"raw_findings": findings}
-        except Exception as exc:  # noqa: BLE001 - any failure triggers a retry then a graceful skip
-            last_error = str(exc)
-            user_prompt = json.dumps(context) + "\n\nReturn ONLY a valid JSON array, nothing else."
-            continue
+        context = await asyncio.to_thread(_gather_context, scan_id, task)
+        system_prompt = f"{AGENT_PROMPTS[agent_name]}\n\n{RESPONSE_FORMAT_INSTRUCTIONS}"
+        user_prompt = json.dumps(context)
+
+        client = build_llm_client(agent_name)
+
+        for _ in range(settings.agent_max_retries + 1):
+            try:
+                raw = await client.complete(system=system_prompt, user=user_prompt)
+                parsed = json.loads(raw)
+                validated = AgentOutputList(findings=parsed if isinstance(parsed, list) else [])
+                findings = [f.model_dump() for f in validated.findings][: settings.max_findings_per_agent]
+                for finding in findings:
+                    finding["agent"] = agent_name
+
+                await asyncio.to_thread(
+                    _record_agent_run,
+                    scan_id,
+                    agent_name,
+                    task,
+                    "completed",
+                    None,
+                    model_provider="openrouter",
+                    model_name=settings.agent_llm_model,
+                    usage=client.last_usage,
+                    findings_count=len(findings),
+                )
+                await asyncio.to_thread(_mark_task_completed, task["task_id"])
+                return {"raw_findings": findings}
+            except Exception as exc:  # noqa: BLE001 - any failure triggers a retry then a graceful skip
+                last_error = str(exc)
+                user_prompt = json.dumps(context) + "\n\nReturn ONLY a valid JSON array, nothing else."
+                continue
+    except Exception as exc:  # noqa: BLE001 - setup/context failures (e.g. a transient
+        # Supabase/Neo4j read) must not escape run_agent: LangGraph aborts the *entire*
+        # Send fan-out step on any unhandled exception from a single dispatched node,
+        # which would silently kill all 5 concurrent agents rather than just this one.
+        last_error = str(exc)
 
     await asyncio.to_thread(
         _record_agent_run,

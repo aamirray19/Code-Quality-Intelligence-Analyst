@@ -71,12 +71,14 @@ def mark_chunks_indexed(chunk_ids: list[UUID], qdrant: bool = False, neo4j: bool
 
     if qdrant:
         # qdrant_point_id is always the chunk's own id (phase2.md 5.11 point-ID
-        # scheme), so this is a per-row upsert rather than a single bulk update.
-        payload = [
-            {"id": str(chunk_id), "indexed_in_qdrant": True, "qdrant_point_id": str(chunk_id)}
-            for chunk_id in chunk_ids
-        ]
-        client.table("code_chunks").upsert(payload, on_conflict="id").execute()
+        # scheme). Must be a per-row UPDATE (not upsert): Postgres validates
+        # NOT NULL constraints on the insert candidate before ON CONFLICT is
+        # even considered, so a partial-column upsert fails NOT NULL checks
+        # even when the row already exists.
+        for chunk_id in chunk_ids:
+            client.table("code_chunks").update(
+                {"indexed_in_qdrant": True, "qdrant_point_id": str(chunk_id)}
+            ).eq("id", str(chunk_id)).execute()
 
     if neo4j:
         client.table("code_chunks").update({"indexed_in_neo4j": True}).in_(

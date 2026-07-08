@@ -4,7 +4,7 @@ from app.core.config import settings
 from app.core.errors import AppError
 from app.schemas.chunks import CodeChunk, EmbeddedChunk
 
-HF_INFERENCE_URL = "https://api-inference.huggingface.co/models/{model}"
+HF_INFERENCE_URL = "https://router.huggingface.co/hf-inference/models/{model}/pipeline/feature-extraction"
 BATCH_SIZE = 32
 REQUEST_TIMEOUT_SECONDS = 60
 

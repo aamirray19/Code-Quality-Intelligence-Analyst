@@ -35,9 +35,9 @@ class Settings(BaseSettings):
     neo4j_password: str | None = None
     neo4j_database: str = "neo4j"
 
-    # Phase 2: embeddings (Qwen3-Embedding-0.6B via HuggingFace Inference API)
+    # Phase 2: embeddings (BAAI/bge-large-en-v1.5 via HuggingFace Inference API)
     embedding_provider: str = "huggingface"
-    embedding_model: str = "Qwen/Qwen3-Embedding-0.6B"
+    embedding_model: str = "BAAI/bge-large-en-v1.5"
     hf_api_token: str | None = None
 
     # Phase 2: worker

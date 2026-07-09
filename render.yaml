@@ -1,0 +1,209 @@
+services:
+  # FastAPI backend: POST /scans, GET /scans/{id}, /report, /findings, /chat
+  - type: web
+    name: cqia-backend
+    runtime: python
+    plan: starter
+    region: oregon
+    rootDir: backend
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: uv run uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: APP_ENV
+        value: production
+      - key: API_BASE_URL
+        sync: false # set to this service's own onrender.com URL after first deploy
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: MAX_REPO_SIZE_KB
+        value: "51200"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_QUEUE_NAME
+        value: repo_scan_queue
+      - key: FRONTEND_URL
+        sync: false # set to the Vercel deployment URL once it exists
+      - key: REPO_WORKSPACE_ROOT
+        value: /tmp/cqia/scans
+      - key: GIT_CLONE_TIMEOUT_SECONDS
+        value: "120"
+      - key: MAX_FILE_SIZE_BYTES
+        value: "500000"
+      - key: MAX_TOTAL_FILES
+        value: "5000"
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: QDRANT_COLLECTION_CODE_CHUNKS
+        value: code_chunks
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_USERNAME
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false
+      - key: NEO4J_DATABASE
+        value: neo4j
+      - key: EMBEDDING_PROVIDER
+        value: huggingface
+      - key: EMBEDDING_MODEL
+        value: BAAI/bge-large-en-v1.5
+      - key: HF_API_TOKEN
+        sync: false
+      - key: WORKER_CONCURRENCY
+        value: "2"
+      - key: AGENT_LLM_PROVIDER
+        value: openrouter
+      - key: AGENT_LLM_MODEL
+        value: google/gemma-4-31b-it:free
+      - key: AGENT_LLM_MODEL_FALLBACK
+        value: google/gemma-4-26b-a4b-it:free
+      - key: OPENROUTER_API_KEY_SUPERVISOR
+        sync: false
+      - key: OPENROUTER_API_KEY_SECURITY
+        sync: false
+      - key: OPENROUTER_API_KEY_PERFORMANCE
+        sync: false
+      - key: OPENROUTER_API_KEY_COMPLEXITY
+        sync: false
+      - key: OPENROUTER_API_KEY_DUPLICATION
+        sync: false
+      - key: OPENROUTER_API_KEY_RELIABILITY
+        sync: false
+      - key: OPENROUTER_API_KEY_SECURITY_FALLBACK
+        sync: false
+      - key: OPENROUTER_API_KEY_PERFORMANCE_FALLBACK
+        sync: false
+      - key: OPENROUTER_API_KEY_COMPLEXITY_FALLBACK
+        sync: false
+      - key: OPENROUTER_API_KEY_DUPLICATION_FALLBACK
+        sync: false
+      - key: OPENROUTER_API_KEY_RELIABILITY_FALLBACK
+        sync: false
+      - key: AGENT_MAX_RETRIES
+        value: "2"
+      - key: AGENT_TIMEOUT_SECONDS
+        value: "120"
+      - key: LANGGRAPH_RECURSION_LIMIT
+        value: "50"
+      - key: MAX_AGENT_CONTEXT_CHUNKS
+        value: "12"
+      - key: MAX_FINDINGS_PER_AGENT
+        value: "20"
+      - key: OPENROUTER_API_KEY_CHATBOT
+        sync: false
+      - key: QDRANT_COLLECTION_AGENT_FINDINGS
+        value: agent_findings
+      - key: QDRANT_COLLECTION_SCAN_REPORTS
+        value: scan_reports
+
+  # RQ worker: consumes repo_scan_queue, runs Phase 2 clone/parse/index,
+  # Phase 3 analysis, and Phase 4 report generation for each scan.
+  - type: worker
+    name: cqia-worker
+    runtime: python
+    plan: starter
+    region: oregon
+    rootDir: backend
+    buildCommand: pip install uv && uv sync --frozen
+    startCommand: uv run python run_worker.py
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: APP_ENV
+        value: production
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: MAX_REPO_SIZE_KB
+        value: "51200"
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: REDIS_QUEUE_NAME
+        value: repo_scan_queue
+      - key: FRONTEND_URL
+        sync: false
+      - key: REPO_WORKSPACE_ROOT
+        value: /tmp/cqia/scans
+      - key: GIT_CLONE_TIMEOUT_SECONDS
+        value: "120"
+      - key: MAX_FILE_SIZE_BYTES
+        value: "500000"
+      - key: MAX_TOTAL_FILES
+        value: "5000"
+      - key: QDRANT_URL
+        sync: false
+      - key: QDRANT_API_KEY
+        sync: false
+      - key: QDRANT_COLLECTION_CODE_CHUNKS
+        value: code_chunks
+      - key: NEO4J_URI
+        sync: false
+      - key: NEO4J_USERNAME
+        sync: false
+      - key: NEO4J_PASSWORD
+        sync: false
+      - key: NEO4J_DATABASE
+        value: neo4j
+      - key: EMBEDDING_PROVIDER
+        value: huggingface
+      - key: EMBEDDING_MODEL
+        value: BAAI/bge-large-en-v1.5
+      - key: HF_API_TOKEN
+        sync: false
+      - key: WORKER_CONCURRENCY
+        value: "2"
+      - key: AGENT_LLM_PROVIDER
+        value: openrouter
+      - key: AGENT_LLM_MODEL
+        value: google/gemma-4-31b-it:free
+      - key: AGENT_LLM_MODEL_FALLBACK
+        value: google/gemma-4-26b-a4b-it:free
+      - key: OPENROUTER_API_KEY_SUPERVISOR
+        sync: false
+      - key: OPENROUTER_API_KEY_SECURITY
+        sync: false
+      - key: OPENROUTER_API_KEY_PERFORMANCE
+        sync: false
+      - key: OPENROUTER_API_KEY_COMPLEXITY
+        sync: false
+      - key: OPENROUTER_API_KEY_DUPLICATION
+        sync: false
+      - key: OPENROUTER_API_KEY_RELIABILITY
+        sync: false
+      - key: OPENROUTER_API_KEY_SECURITY_FALLBACK
+        sync: false
+      - key: OPENROUTER_API_KEY_PERFORMANCE_FALLBACK
+        sync: false
+      - key: OPENROUTER_API_KEY_COMPLEXITY_FALLBACK
+        sync: false
+      - key: OPENROUTER_API_KEY_DUPLICATION_FALLBACK
+        sync: false
+      - key: OPENROUTER_API_KEY_RELIABILITY_FALLBACK
+        sync: false
+      - key: AGENT_MAX_RETRIES
+        value: "2"
+      - key: AGENT_TIMEOUT_SECONDS
+        value: "120"
+      - key: LANGGRAPH_RECURSION_LIMIT
+        value: "50"
+      - key: MAX_AGENT_CONTEXT_CHUNKS
+        value: "12"
+      - key: MAX_FINDINGS_PER_AGENT
+        value: "20"
+      - key: OPENROUTER_API_KEY_CHATBOT
+        sync: false
+      - key: QDRANT_COLLECTION_AGENT_FINDINGS
+        value: agent_findings
+      - key: QDRANT_COLLECTION_SCAN_REPORTS
+        value: scan_reports

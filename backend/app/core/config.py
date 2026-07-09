@@ -45,13 +45,22 @@ class Settings(BaseSettings):
 
     # Phase 3: OpenRouter LLM client
     agent_llm_provider: str = "openrouter"
-    agent_llm_model: str = "deepseek/deepseek-chat-v3-0324"
+    agent_llm_model: str = "google/gemma-4-31b-it:free"
+    # Escalation model tried on the same key once agent_llm_model keeps 429ing.
+    agent_llm_model_fallback: str = "google/gemma-4-26b-a4b-it:free"
     openrouter_api_key_supervisor: str | None = None
     openrouter_api_key_security: str | None = None
     openrouter_api_key_performance: str | None = None
     openrouter_api_key_complexity: str | None = None
     openrouter_api_key_duplication: str | None = None
     openrouter_api_key_reliability: str | None = None
+    # Optional second key per specialist agent. If set, tried (with both models
+    # above) after the primary key exhausts its own rate-limit retries.
+    openrouter_api_key_security_fallback: str | None = None
+    openrouter_api_key_performance_fallback: str | None = None
+    openrouter_api_key_complexity_fallback: str | None = None
+    openrouter_api_key_duplication_fallback: str | None = None
+    openrouter_api_key_reliability_fallback: str | None = None
     agent_max_retries: int = 2
     agent_timeout_seconds: int = 120
     langgraph_recursion_limit: int = 50

@@ -258,8 +258,16 @@ def _run_scan(job: RepoScanJob, scan) -> None:
     # own fail_analysis node records the failure in Supabase.
     try:
         asyncio.run(run_analysis(scan_id))
-    except Exception:  # noqa: BLE001 - Phase 3 failures are self-contained in the graph
+    except Exception as exc:  # noqa: BLE001 - Phase 3 failures are self-contained in the
+        # graph for routed failures (fail_analysis node), but an uncaught exception from
+        # inside a node (e.g. a transient socket error escaping an agent) bypasses that
+        # node entirely. Without this, the scan is left silently stuck at its prior
+        # status forever with no error visible to any API the frontend polls.
         logger.exception("Phase 3 analysis failed for scan_id=%s", scan_id)
+        scan_service.update_scan(scan_id, status="analysis_failed", error_message=str(exc))
+        scan_event_service.create_event(
+            scan_id, "analysis_failed", "Phase 3 analysis failed.", {"error_message": str(exc)}
+        )
     else:
         # Phase 4: Report generation — runs only if Phase 3 succeeded.
         # A Phase 4 failure must not affect Phase 3's already-successful status;

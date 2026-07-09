@@ -8,6 +8,11 @@ from app.core.errors import AppError
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
+# Backoff applied between retries of the same (key, model) after a 429;
+# indexed by attempt number, capped at the last entry. Shared by every
+# caller that retries LLM_RATE_LIMITED errors (agent_factory, report_builder_service).
+RATE_LIMIT_BACKOFF_SECONDS = [2, 5, 10]
+
 AGENT_KEY_ATTR = {
     "supervisor": "openrouter_api_key_supervisor",
     "security": "openrouter_api_key_security",
@@ -62,6 +67,15 @@ class OpenRouterClient:
             response = await asyncio.wait_for(_post(), timeout=self._timeout)
             response.raise_for_status()
             data = response.json()
+        except httpx.HTTPStatusError as exc:
+            # Surface 429 with a distinct error_code so callers (agent_factory's
+            # retry/fallback cascade) can back off and escalate model/key instead
+            # of treating it like any other request failure.
+            if exc.response is not None and exc.response.status_code == 429:
+                raise AppError(
+                    "LLM_RATE_LIMITED", f"OpenRouter request failed: {exc}", 502
+                ) from exc
+            raise AppError("LLM_REQUEST_FAILED", f"OpenRouter request failed: {exc}", 502) from exc
         except (httpx.HTTPError, ValueError, asyncio.TimeoutError) as exc:
             raise AppError("LLM_REQUEST_FAILED", f"OpenRouter request failed: {exc}", 502) from exc
 

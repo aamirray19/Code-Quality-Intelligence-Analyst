@@ -1,8 +1,16 @@
 """Service for building LLM-generated Markdown reports from scan findings."""
 
+import asyncio
+
+from app.core.config import settings
+from app.core.errors import AppError
 from app.schemas.finding import FindingRecord
 from app.schemas.report import ReportMetrics
-from app.services.openrouter_client import build_llm_client
+from app.services.openrouter_client import (
+    AGENT_KEY_ATTR,
+    RATE_LIMIT_BACKOFF_SECONDS,
+    OpenRouterClient,
+)
 
 
 async def build_report_markdown(
@@ -67,8 +75,28 @@ Use proper Markdown formatting with headers, lists, and emphasis where appropria
 
 Please generate a comprehensive Markdown report based on this information."""
 
-    # Call LLM
-    client = build_llm_client("chatbot")
-    markdown_report = await client.complete(system=system_prompt, user=user_prompt)
+    # Call LLM, backing off and escalating to the fallback model on 429
+    # (mirrors agent_factory.run_agent's retry cascade; no key fallback here
+    # since only the specialist agents got a second key by design).
+    api_key = getattr(settings, AGENT_KEY_ATTR["chatbot"]) or ""
+    models = [settings.agent_llm_model, settings.agent_llm_model_fallback]
+    last_error: AppError | None = None
 
-    return markdown_report
+    for model in models:
+        client = OpenRouterClient(
+            api_key=api_key, model=model, timeout_seconds=settings.agent_timeout_seconds
+        )
+        for attempt in range(settings.agent_max_retries + 1):
+            try:
+                return await client.complete(system=system_prompt, user=user_prompt)
+            except AppError as exc:
+                last_error = exc
+                if exc.error_code == "LLM_RATE_LIMITED" and attempt < settings.agent_max_retries:
+                    backoff = RATE_LIMIT_BACKOFF_SECONDS[
+                        min(attempt, len(RATE_LIMIT_BACKOFF_SECONDS) - 1)
+                    ]
+                    await asyncio.sleep(backoff)
+                    continue
+                break  # non-rate-limit error, or retries exhausted: try next model
+
+    raise last_error

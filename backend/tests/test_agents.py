@@ -62,7 +62,7 @@ async def test_agent_returns_findings_on_valid_llm_response(agent_name, agent_fn
     fake_llm = MagicMock()
     fake_llm.complete = fake_complete
 
-    with patch(f"{MODULE}.build_llm_client", return_value=fake_llm), patch(
+    with patch(f"{MODULE}.OpenRouterClient", return_value=fake_llm), patch(
         f"{MODULE}.supabase_metadata_tool.list_chunks", return_value=[]
     ), patch(f"{MODULE}.supabase_metadata_tool.get_symbol_context", return_value=None), patch(
         f"{MODULE}.neo4j_graph_tool.get_symbol_neighbors", return_value=[]
@@ -102,7 +102,7 @@ async def test_agent_records_token_usage_on_success():
     fake_llm.complete = fake_complete
     fake_llm.last_usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
 
-    with patch(f"{MODULE}.build_llm_client", return_value=fake_llm), patch(
+    with patch(f"{MODULE}.OpenRouterClient", return_value=fake_llm), patch(
         f"{MODULE}.supabase_metadata_tool.list_chunks", return_value=[]
     ), patch(f"{MODULE}.supabase_metadata_tool.get_symbol_context", return_value=None), patch(
         f"{MODULE}.neo4j_graph_tool.get_symbol_neighbors", return_value=[]
@@ -126,7 +126,7 @@ async def test_agent_returns_empty_findings_after_exhausted_retries():
     fake_llm = MagicMock()
     fake_llm.complete = failing_complete
 
-    with patch(f"{MODULE}.build_llm_client", return_value=fake_llm), patch(
+    with patch(f"{MODULE}.OpenRouterClient", return_value=fake_llm), patch(
         f"{MODULE}.supabase_metadata_tool.list_chunks", return_value=[]
     ), patch(f"{MODULE}.supabase_metadata_tool.get_symbol_context", return_value=None), patch(
         f"{MODULE}.neo4j_graph_tool.get_symbol_neighbors", return_value=[]

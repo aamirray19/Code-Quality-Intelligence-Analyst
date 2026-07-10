@@ -3,7 +3,7 @@ services:
   - type: web
     name: cqia-backend
     runtime: python
-    plan: starter
+    plan: free
     region: oregon
     rootDir: backend
     buildCommand: pip install uv && uv sync --frozen
@@ -109,7 +109,7 @@ services:
   - type: worker
     name: cqia-worker
     runtime: python
-    plan: starter
+    plan: free
     region: oregon
     rootDir: backend
     buildCommand: pip install uv && uv sync --frozen

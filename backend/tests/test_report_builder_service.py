@@ -13,16 +13,19 @@ from app.services.report_builder_service import build_report_markdown
 @pytest.mark.asyncio
 @respx.mock
 async def test_build_report_markdown_returns_mocked_response(monkeypatch):
-    """Test that build_report_markdown calls OpenRouter and returns its response."""
+    """Test that build_report_markdown calls Google AI and returns its response."""
     from app.core.config import settings
     
     # Set a test API key
-    monkeypatch.setattr(settings, "openrouter_api_key_chatbot", "test-chatbot-key")
+    monkeypatch.setattr(settings, "google_api_key_chatbot", "test-chatbot-key")
     
     mock_markdown = "# Security Report\n\nFindings summary here..."
-    route = respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+    route = respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemma-4-31b-it:generateContent"
+    ).mock(
         return_value=httpx.Response(
-            200, json={"choices": [{"message": {"content": mock_markdown}}]}
+            200,
+            json={"candidates": [{"content": {"role": "model", "parts": [{"text": mock_markdown}]}}]},
         )
     )
     
@@ -58,8 +61,9 @@ async def test_build_report_markdown_returns_mocked_response(monkeypatch):
     request_body = json.loads(request.content)
     
     # Verify the prompt includes our data
-    messages = request_body["messages"]
-    all_content = " ".join(msg["content"] for msg in messages)
+    all_content = request_body["systemInstruction"]["parts"][0]["text"] + " " + " ".join(
+        p["text"] for c in request_body["contents"] for p in c["parts"]
+    )
     assert "SQL Injection vulnerability" in all_content
     assert repo_url in all_content
     assert "85.5" in all_content or "85" in all_content  # Allow for different number formatting
@@ -72,12 +76,15 @@ async def test_build_report_markdown_includes_top_20_findings_only(monkeypatch):
     from app.core.config import settings
     
     # Set a test API key
-    monkeypatch.setattr(settings, "openrouter_api_key_chatbot", "test-chatbot-key")
+    monkeypatch.setattr(settings, "google_api_key_chatbot", "test-chatbot-key")
     
     mock_markdown = "# Report with many findings"
-    route = respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+    route = respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemma-4-31b-it:generateContent"
+    ).mock(
         return_value=httpx.Response(
-            200, json={"choices": [{"message": {"content": mock_markdown}}]}
+            200,
+            json={"candidates": [{"content": {"role": "model", "parts": [{"text": mock_markdown}]}}]},
         )
     )
     
@@ -112,8 +119,9 @@ async def test_build_report_markdown_includes_top_20_findings_only(monkeypatch):
     # Verify the request includes the top 20 findings but not the rest
     request = route.calls.last.request
     request_body = json.loads(request.content)
-    messages = request_body["messages"]
-    all_content = " ".join(msg["content"] for msg in messages)
+    all_content = request_body["systemInstruction"]["parts"][0]["text"] + " " + " ".join(
+        p["text"] for c in request_body["contents"] for p in c["parts"]
+    )
     
     # Should include findings 0-19
     assert "Finding 0" in all_content
@@ -132,12 +140,15 @@ async def test_build_report_markdown_with_fewer_than_20_findings(monkeypatch):
     from app.core.config import settings
     
     # Set a test API key
-    monkeypatch.setattr(settings, "openrouter_api_key_chatbot", "test-chatbot-key")
+    monkeypatch.setattr(settings, "google_api_key_chatbot", "test-chatbot-key")
     
     mock_markdown = "# Small Report"
-    route = respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+    route = respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/gemma-4-31b-it:generateContent"
+    ).mock(
         return_value=httpx.Response(
-            200, json={"choices": [{"message": {"content": mock_markdown}}]}
+            200,
+            json={"candidates": [{"content": {"role": "model", "parts": [{"text": mock_markdown}]}}]},
         )
     )
     
@@ -172,8 +183,9 @@ async def test_build_report_markdown_with_fewer_than_20_findings(monkeypatch):
     # Verify all 5 findings are in the request
     request = route.calls.last.request
     request_body = json.loads(request.content)
-    messages = request_body["messages"]
-    all_content = " ".join(msg["content"] for msg in messages)
+    all_content = request_body["systemInstruction"]["parts"][0]["text"] + " " + " ".join(
+        p["text"] for c in request_body["contents"] for p in c["parts"]
+    )
     
     # All findings should be present
     for i in range(5):

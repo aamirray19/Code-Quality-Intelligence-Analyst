@@ -405,3 +405,116 @@ Implemented Phase 3 across 19 tasks (Task 20 is this verification/handoff task):
 - Backend: `backend/db/migrations/0001_init.sql` (Phase 4 tables added), `backend/app/core/config.py`, new schemas/services under `backend/app/schemas/` and `backend/app/services/` (report/finding/chat/graph/RAG related), `backend/app/api/routes/reports.py`, `findings.py`, `chat.py` (new), `backend/app/main.py` (router registration), plus corresponding test files under `backend/tests/`.
 - Frontend: `frontend/src/lib/reportApi.ts`, `chatApi.ts` (new); `frontend/src/components/RepoAnalyzer.tsx` (bug fix), `AnimatedRoutes.tsx` (new route); `frontend/src/pages/ReportPage.tsx` (new); `frontend/src/components/report/*` (new: `ReportHeader.tsx`, `ReportSummaryMetrics.tsx`, `MarkdownReportView.tsx`, `FindingsFilterBar.tsx`, `FindingsList.tsx`); `frontend/src/components/chat/*` (new: `ChatSessionList.tsx`, `ChatMessageBubble.tsx`, `ChatPanel.tsx`); `frontend/package.json` (added `react-markdown`); `frontend/tailwind.config.ts` (registered `@tailwindcss/typography`).
 - No files committed to git this session (standing no-commit constraint; user commits manually).
+
+---
+
+## Date
+
+- 2026-07-10 12:58 IST
+
+## Currently verified
+
+- Full onboarding pass at session start: read `AGENTS.md`, this file, `docs/phase1.md`-`docs/phase4.md`, `decisions.md`. Ran `task install` (clean) and `task backend:test` → 222 passed / 1 flaky failure / 15 errors. Root-caused both: the 15 errors are a poisoned/permission-denied `pytest-of-aamir` temp dir on this machine (`PermissionError: [WinError 5] Access is denied`), unrelated to any code; the 1 flaky failure (`test_retrieve_relevant_docs_includes_text_field`) passes clean in isolation and traces to `pytest-asyncio` version drift — `pyproject.toml` pins `>=0.24.0` but the installed version is `1.4.0`, a major jump from whatever was pinned when "238/238" was last recorded, causing an order-dependent event-loop fixture flake. Zero real logic regressions found. `task frontend:build` clean; `task frontend:lint` unchanged from the documented baseline (9 problems, all pre-existing vendored shadcn files).
+- Found, before touching anything, 3 undocumented commits already on `dev` past the last recorded handoff entry above (`685ebcf`/`5c3086b`/`32f8e9e`, all dated 2026-07-08) — real runtime bug fixes (HF embedding endpoint/model swap, RQ `job_timeout` increase, Qdrant upsert→update NOT NULL fix, OpenRouter hard timeout via `asyncio.wait_for`, an `agent_factory` exception-safety wrap) that were never logged in this file or `decisions.md`. The RQ worker log at session start also showed an abandoned job from an earlier run, consistent with someone having run a live scan and hit these bugs outside the documented AGENTS.md process.
+- Ran 4 live end-to-end scans against a real public repo (`aamirray19/Speedometer`) through the actual stack running locally (`uv run uvicorn ...` + `uv run python run_worker.py`, real Supabase/Redis/Qdrant/Neo4j/OpenRouter credentials) — the first genuine live-credential smoke test this project has ever had, closing an item flagged as outstanding since the 2026-07-05 Phase 2 session and repeated in every session since.
+- Confirmed via direct code reads (not just docs) that `scan_id` is the sole isolation key across Supabase/Qdrant/Neo4j on every read/write path checked, including both Phase 3 agent tools (`qdrant_retrieval_tool.py`, `neo4j_graph_tool.py`, `supabase_metadata_tool.py`) and Phase 4's `rag_retrieval_service.py`/`graph_context_service.py` — no cross-repo/cross-scan data leakage found in any path inspected.
+- Live-tested each of the 5 specialist agents individually against hand-crafted, deliberately flawed code samples (one planted issue per specialty: hardcoded secret + SQL injection + eval for security, N+1 query for performance, deep nesting for complexity, near-duplicate functions for duplication, unguarded external call for reliability) via a standalone script reusing the real `AGENT_PROMPTS`/`_llm_candidates`/semaphore from `agent_factory.py`. 4/5 agents produced correct, on-target findings matching the planted issue exactly; the reliability agent hit rate-limit exhaustion (expected — single key at the time, last agent through the concurrency queue).
+
+## Changes this session
+
+- **Bug fixes** (full reasoning in `decisions.md`, 2026-07-10 entries):
+  1. `agent_factory.run_agent`'s tail failure-recording block wrapped in its own try/except — an unhandled exception there previously could kill LangGraph's entire 5-agent `Send` fan-out instead of just the one agent's bookkeeping.
+  2. `repo_scan_worker.py` now sets `scan.status = "analysis_failed"` and logs an event on an uncaught Phase 3 exception — previously left the scan silently and permanently stuck at `status = "parsed"` with no error visible via any API.
+  3. Added an `AGENT_LLM_CONCURRENCY_LIMIT = 2` semaphore in `agent_factory.py`, wrapping each agent's *entire* turn (not just the LLM call), plus a small retry-with-delay (`_run_with_retry`) around `_gather_context`'s Supabase/Neo4j reads — root-caused and contained `WinError 10035` (WSAEWOULDBLOCK), a Windows-`ProactorEventLoop`-only failure mode triggered by 5 agents' concurrent Supabase/OpenRouter I/O. Confirmed Linux-only deploy targets don't have this specific failure mode, but it was blocking all local verification.
+- **Model / rate-limit handling**:
+  - `AGENT_LLM_MODEL` switched from `deepseek/deepseek-chat-v3-0324` (paid, ran out of credits mid-session — confirmed via a live `402 Payment Required`) to `google/gemma-4-31b-it:free`.
+  - Added `AGENT_LLM_MODEL_FALLBACK=google/gemma-4-26b-a4b-it:free` and 5 new optional `OPENROUTER_API_KEY_<AGENT>_FALLBACK` settings (security/performance/complexity/duplication/reliability only).
+  - `openrouter_client.py`: `429` responses now raise a distinct `LLM_RATE_LIMITED` error_code instead of the generic `LLM_REQUEST_FAILED`; `RATE_LIMIT_BACKOFF_SECONDS` moved here as a shared constant.
+  - `agent_factory.py`: added `_llm_candidates()` (ordered key×model cascade: primary key+model → primary key+fallback model → fallback key+model → fallback key+fallback model) with backoff-then-escalate retry logic in `run_agent`.
+  - `report_builder_service.py`: same backoff + model-fallback treatment added to the final report-generation LLM call (previously zero retry logic — died immediately on its first 429).
+- **Tests**: updated 4 patch call-sites (`test_agents.py` x3, `test_analysis_graph.py` x1) that mocked the now-removed `build_llm_client` import in `agent_factory.py`, switching them to patch `OpenRouterClient` directly (the new construction pattern). No test logic changes beyond the patch target.
+- **Docs**: corrected `docs/phase3.md` §19's env var list, which still showed the pre-OpenRouter `AGENT_LLM_PROVIDER=deepseek`/`DEEPSEEK_API_KEY` block (already known-stale per the 2026-07-06 decision, and now doubly stale after tonight's model/fallback changes) to reflect the current `AGENT_LLM_MODEL`/`AGENT_LLM_MODEL_FALLBACK`/fallback-key env vars.
+- Left the 5 `OPENROUTER_API_KEY_*_FALLBACK` values unset in the user's local `.env` — user is planning to add them; `_llm_candidates()` already handles them being empty by degrading gracefully to the 2-model/1-key cascade.
+- Deployment (Render/Vercel) was explored mid-session — `render.yaml` and `frontend/vercel.json` were created and iterated on (including fixing an accidental paid-tier `plan: starter` → `plan: free`) — but the user explicitly dropped the deploy effort before completion. Per explicit instruction, this handoff entry and `decisions.md` do not document the deployment work further; the two files remain in the repo from that exploration but are unverified/untested.
+
+## Verification run
+
+- `task backend:test` → 223 passed, 0 failed, 15 pre-existing environment errors (see "Currently verified" above) — run after all code changes this session, confirming zero regressions.
+- 4 live end-to-end scans against a real repo through the real worker/backend, watched via `GET /scans/{id}/events` at every phase transition — confirmed the Phase 1→2→3→4 same-worker chain fires automatically and correctly after the fixes above (previously got silently stuck; now either completes with findings or fails visibly).
+- Standalone live per-agent test (scratchpad script, not part of the repo) — 4/5 agents produced correct, specialty-matched findings on hand-crafted sample code; 1/5 hit an expected, understood rate-limit exhaustion.
+
+## Still broken or unverified
+
+- The key-fallback tier of the new cascade has not been live-tested — only the model-fallback tier has actually fired during this session's testing, since the 5 `OPENROUTER_API_KEY_*_FALLBACK` values are still unset locally.
+- `supabase_metadata_tool.list_chunks` has no relevance ranking (no `ORDER BY`) — under the supervisor's deterministic fallback plan (which assigns every file/symbol to every agent when the supervisor's own LLM call fails), the 12-chunk cap effectively becomes "whatever 12 rows Supabase returns first," not a curated slice. Identified and discussed this session, not fixed — a real context-quality gap, out of scope for this session's bug-fixing pass.
+- `_gather_context` reads `task["target_file_ids"]`/`target_symbol_ids` but never reads `task["target_chunk_ids"]` despite it being part of the task schema — a dead field, discovered during this session's code review, not fixed.
+- User has since confirmed Supabase tables are created from `backend/db/migrations/0001_init.sql`, but this session did not independently re-verify the live schema matches the migration file exactly.
+- The `pytest-asyncio` version drift and the poisoned `pytest-of-aamir` temp dir (see "Currently verified") are real, unaddressed environment issues on this dev machine — flagged, not fixed, since they're machine-specific rather than code bugs.
+- Deployment remains unfinished and unverified — dropped by explicit user instruction this session; `render.yaml`/`frontend/vercel.json` exist but were never actually deployed end-to-end.
+
+## Next section
+
+- If/when the user adds the 5 `OPENROUTER_API_KEY_*_FALLBACK` values, re-run a live scan to confirm the key-fallback tier actually engages under sustained rate-limit pressure.
+- Consider addressing the `list_chunks` relevance-ranking gap and the dead `target_chunk_ids` field — both real, identified gaps; needs a decision on priority/timing, not urgent.
+- Pin `pytest-asyncio` to a known-good version and resolve the local `pytest-of-aamir` temp dir permission issue — cheap fix, removes false-negative noise from every future `task backend:test` run on this machine.
+- A project README.md (currently absent at repo root) was discussed and an outline agreed with the user but not yet written — pick that up if still wanted.
+
+## Files changed
+
+- Modified: `backend/app/core/config.py` (model + 5 fallback-key settings), `backend/.env.example` (same), `backend/app/services/openrouter_client.py` (429 detection, shared backoff constant), `backend/app/workflows/analysis/agents/agent_factory.py` (semaphore widening, retry helper, candidate cascade, exception-safety wrap), `backend/app/workers/repo_scan_worker.py` (`analysis_failed` status on uncaught exception), `backend/app/services/report_builder_service.py` (backoff + model fallback), `backend/tests/test_agents.py`, `backend/tests/test_analysis_graph.py` (patch target updates), `docs/phase3.md` (§19 env var correction), `decisions.md` (5 new dated entries).
+- Created, exploration dropped mid-session (not documented further per user instruction): `render.yaml`, `frontend/vercel.json`.
+- No files committed to git this session (standing no-commit constraint; user commits manually).
+
+---
+
+## Date
+
+- 2026-07-10 17:27 IST
+
+## Currently verified
+
+- Executed the full Google AI Studio migration plan (`docs/superpowers/plans/2026-07-10-google-ai-studio-migration.md`, 8 TDD tasks, inline execution): replaced `openrouter_client.py` with `google_ai_client.py` (`GoogleAIClient`, same interface — `__init__(api_key, model, timeout_seconds)`, `async complete(*, system, user) -> str`, `self.last_usage` dict with unchanged OpenAI-style key names), migrated all 5 consumers (`agent_factory.py`, `report_builder_service.py`, `build_analysis_plan.py`, `chatbot_service.py` x2 call sites), renamed every `openrouter_api_key_*` setting to `google_api_key_*`, deleted the old client + its test file. Full backend suite green after every task (`234 passed` at completion, up from `226` pre-migration baseline — net new tests from the new client's own test file).
+- Separately migrated the embedding provider too (HuggingFace `BAAI/bge-large-en-v1.5` → Google AI Studio's `gemini-embedding-2`), since it was a distinct service using its own client code (`embedding_service.py`) not touched by the LLM-client migration plan. New `google_api_key_embedding` setting.
+- Model choice was corrected mid-session from an initially-guessed `gemini-2.5-flash`/`gemini-2.5-flash-lite` to the user's actual requested `gemma-4-31b-it` (primary) / `gemma-4-26b-a4b-it` (fallback) — verified both are real, current Google AI Studio model IDs via web search before touching config.
+- Ran a real end-to-end live scan (`aamirray19/Speedometer`) all the way through to `analysis_completed` with **13 real findings normalized and stored** — the first successful live-credential findings-producing run on Google AI Studio this project has ever had. 3 of 5 agents (performance, complexity, duplication) succeeded outright; security and reliability hit transient `500 Internal Server Error` responses from Google's own infrastructure (confirmed via a follow-up isolated test: all 5 agents succeeded cleanly on a retry with zero errors, so this was Google-side flakiness, not a code bug).
+- Confirmed via a standalone script (reusing the real `AGENT_PROMPTS`/`_llm_candidates`/semaphore from `agent_factory.py`, not mocks) that all 5 specialist agent prompts correctly elicit accurate, specialty-matched findings from `gemma-4-31b-it` on hand-crafted sample code, matching the same validation already done earlier this session against OpenRouter.
+- Report generation itself has not yet succeeded live end-to-end — every attempt so far has hit either the (now-fixed) migration bugs below, or a transient Google 500 on the actual report-writing call. Not blocked on a known bug; next live attempt should very likely succeed given the agents-only isolated test came back 5/5 clean.
+
+## Changes this session
+
+Four real bugs found live during Google AI Studio testing and fixed (full reasoning in `decisions.md`, 2026-07-10 entries):
+
+1. **Qdrant vector dimension mismatch**: Gemini Embedding 2 defaults to 3072-dim, but existing Qdrant collections (`code_chunks`/`agent_findings`/`scan_reports`) were created at 1024-dim under the prior HF/BAAI model. First live embed attempt failed with a clean Qdrant 400. Fixed by setting `outputDimensionality: 1024` on every embedding request (Matryoshka Representation Learning truncation, confirmed valid down to 128) and L2-normalizing every returned vector (required per Google's own docs — vectors truncated below the native 3072-dim aren't normalized by default, which would otherwise silently degrade Qdrant's cosine-distance search quality).
+2. **Gemma "thinking" response parsing**: Gemma 4 can return multiple `parts` per response — a reasoning-trace part marked `"thought": true` ahead of the real answer. The client was naively taking `parts[0]["text"]`, returning the reasoning trace instead of the agent's actual JSON findings. Fixed via a new `_extract_answer_text()` helper filtering out any `"thought": true` part. A first attempted fix — `generationConfig.thinkingConfig.thinkingBudget: 0`, the documented way to disable thinking for Gemini models — was tried and confirmed live to fail with `400 Bad Request: "Thinking budget is not supported for this model."` Gemma doesn't support that config field at all; removed it, relying solely on the response-side filter.
+3. **Cross-event-loop semaphore crash**: `agent_factory._llm_semaphore` was a module-level `asyncio.Semaphore` created once at import time, but `repo_scan_worker.py` calls `asyncio.run(run_analysis(scan_id))` fresh per scan (a new event loop each time). The second scan processed by the same long-lived worker process (first time all session two scans ran without an intervening restart) crashed immediately with `<Semaphore ...> is bound to a different event loop`. Fixed with `agent_factory.reset_llm_semaphore()`, called at the top of `graph.run_analysis()`, rebinding a fresh semaphore to the current loop every run.
+4. **Left unresolved, by explicit user choice**: one live scan hung for **over an hour** before failing with `WinError 10054` (connection forcibly closed) — `asyncio.wait_for(timeout=120)` did not actually bound wall-clock time for that request. User chose to retry rather than investigate; every subsequent scan completed normally (a few minutes), suggesting a one-off network event, but the underlying timeout-enforcement gap was never root-caused or fixed.
+- Comprehensive final grep sweep across `backend/` and `docs/` confirmed zero remaining stale `openrouter`/`huggingface`/`gemini-2.5` references outside intentional historical-note comments and the (deliberately unedited, per established convention) migration plan document.
+- `docs/phase2.md`'s embeddings env var block (previously already-stale, pointing at a never-implemented `openai`/`text-embedding-3-small`) corrected to match the real `google`/`gemini-embedding-2` implementation.
+
+## Verification run
+
+- `task backend:test` equivalent (`uv run pytest -q`) → 234-235 passed across every task in the migration plan and each subsequent bug fix, 0 new failures, same 15 pre-existing environment errors throughout (unrelated, flagged since onboarding).
+- 8+ live end-to-end scans against `aamirray19/Speedometer` through the real stack (`uv run uvicorn` + `uv run python run_worker.py`, real Supabase/Redis/Qdrant/Neo4j/Google AI Studio credentials) across the whole debugging arc — each fix verified by killing/restarting both processes and re-running a fresh scan.
+- Standalone live per-agent script (scratchpad, not part of the repo) rerun after the Google AI Studio migration — 5/5 agents succeeded cleanly with correct, specialty-matched findings, confirming the agent logic itself (prompts, JSON parsing, response extraction) is solid on the new provider.
+
+## Still broken or unverified
+
+- **Report generation has not yet completed successfully live** — blocked so far only by transient Google-side 500s, not a known code bug; the isolated 5/5-agent success strongly suggests the next live attempt will clear this.
+- **The hour-long hang / timeout-enforcement gap is unresolved** (see "Changes this session" #4 above) — `asyncio.wait_for` is not a reliable wall-clock bound against a stalled/dead connection on this machine. Contained (thanks to the earlier "unhandled exceptions no longer strand a scan" fix) but not fixed.
+- Embeddings, supervisor, and report generation currently share the **same literal API key value** in the user's local `.env` (`google_api_key_embedding` / `google_api_key_supervisor` / `google_api_key_chatbot` were all set to one key) — meaning those three draw from one shared Google Cloud project quota rather than being isolated from each other, undermining part of the fallback-cascade design's intent. Not fixed — the user's own credential provisioning choice, flagged for awareness.
+- The 2026-07-10 (12:58 IST entry)'s still-open items remain open: key-fallback tier still not live-tested with real distinct fallback keys, `list_chunks` relevance-ranking gap, dead `target_chunk_ids` field, `pytest-asyncio` version drift, poisoned `pytest-of-aamir` temp dir.
+- Deployment (Render/Vercel) remains dropped/unfinished, unrelated to tonight's work.
+
+## Next section
+
+- Run one more live scan attempt now that the agent-only path is confirmed 5/5 clean — likely to finally produce a real, complete report end-to-end.
+- If the hour-long hang recurs (especially reproducibly), invest in explicit granular `httpx.Timeout(connect=, read=, write=, pool=)` config and investigate why `wait_for`'s cancellation isn't freeing the stalled connection.
+- Consider giving `google_api_key_embedding`/`google_api_key_supervisor`/`google_api_key_chatbot` distinct key values (or distinct GCP projects, per the standing fallback-key caveat) instead of the current shared value, if quota contention becomes visible.
+- A project README.md (still absent at repo root) remains outstanding, outline already agreed with the user.
+
+## Files changed
+
+- Created: `backend/app/services/google_ai_client.py`, `backend/tests/test_google_ai_client.py`.
+- Deleted: `backend/app/services/openrouter_client.py`, `backend/tests/test_openrouter_client.py`.
+- Modified: `backend/app/core/config.py`, `backend/.env.example`, `backend/.env` (real keys added by user), `backend/app/workflows/analysis/agents/agent_factory.py` (client migration, `reset_llm_semaphore`), `backend/app/workflows/analysis/graph.py` (`reset_llm_semaphore` call), `backend/app/services/report_builder_service.py`, `backend/app/workflows/analysis/nodes/build_analysis_plan.py`, `backend/app/services/chatbot_service.py`, `backend/app/services/embedding_service.py` (full rewrite: HF → Google AI Studio, dimension truncation, L2 normalization), `backend/tests/test_agents.py`, `backend/tests/test_analysis_graph.py`, `backend/tests/test_report_builder_service.py`, `backend/tests/test_chatbot_service.py`, `backend/tests/test_config.py`, `backend/tests/test_embedding_service_embed_text.py` (full rewrite), `docs/phase2.md` (embeddings env var correction), `docs/phase3.md` (model ID correction), `decisions.md` (5 new dated entries).
+- No files committed to git this session (standing no-commit constraint; user commits manually).

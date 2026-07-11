@@ -14,17 +14,19 @@ from app.services.chatbot_service import answer_question, classify_question
 @respx.mock
 async def test_classify_question_file_specific():
     """Test that classify_question returns 'file_specific' for file-related questions."""
-    # Mock OpenRouter API to return "file_specific"
-    respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+    # Mock Google AI API to return "file_specific"
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/test-model:generateContent"
+    ).mock(
         return_value=httpx.Response(
-            200, json={"choices": [{"message": {"content": "file_specific"}}]}
+            200, json={"candidates": [{"content": {"role": "model", "parts": [{"text": "file_specific"}]}}]}
         )
     )
 
     with patch("app.services.chatbot_service.build_llm_client") as mock_build:
-        from app.services.openrouter_client import OpenRouterClient
+        from app.services.google_ai_client import GoogleAIClient
 
-        mock_client = OpenRouterClient(api_key="test-key", model="test-model")
+        mock_client = GoogleAIClient(api_key="test-key", model="test-model")
         mock_build.return_value = mock_client
 
         result = await classify_question("What security issues are in auth.py?")
@@ -35,17 +37,19 @@ async def test_classify_question_file_specific():
 @respx.mock
 async def test_classify_question_general():
     """Test that classify_question returns 'general' for general questions."""
-    # Mock OpenRouter API to return "general"
-    respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+    # Mock Google AI API to return "general"
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/test-model:generateContent"
+    ).mock(
         return_value=httpx.Response(
-            200, json={"choices": [{"message": {"content": "general"}}]}
+            200, json={"candidates": [{"content": {"role": "model", "parts": [{"text": "general"}]}}]}
         )
     )
 
     with patch("app.services.chatbot_service.build_llm_client") as mock_build:
-        from app.services.openrouter_client import OpenRouterClient
+        from app.services.google_ai_client import GoogleAIClient
 
-        mock_client = OpenRouterClient(api_key="test-key", model="test-model")
+        mock_client = GoogleAIClient(api_key="test-key", model="test-model")
         mock_build.return_value = mock_client
 
         result = await classify_question("What is the overall code quality?")
@@ -56,17 +60,24 @@ async def test_classify_question_general():
 @respx.mock
 async def test_classify_question_malformed_response_defaults_to_general():
     """Test that classify_question defaults to 'general' on unexpected LLM response."""
-    # Mock OpenRouter API to return an unexpected response
-    respx.post("https://openrouter.ai/api/v1/chat/completions").mock(
+    # Mock Google AI API to return an unexpected response
+    respx.post(
+        "https://generativelanguage.googleapis.com/v1beta/models/test-model:generateContent"
+    ).mock(
         return_value=httpx.Response(
-            200, json={"choices": [{"message": {"content": "something_unexpected"}}]}
+            200,
+            json={
+                "candidates": [
+                    {"content": {"role": "model", "parts": [{"text": "something_unexpected"}]}}
+                ]
+            },
         )
     )
 
     with patch("app.services.chatbot_service.build_llm_client") as mock_build:
-        from app.services.openrouter_client import OpenRouterClient
+        from app.services.google_ai_client import GoogleAIClient
 
-        mock_client = OpenRouterClient(api_key="test-key", model="test-model")
+        mock_client = GoogleAIClient(api_key="test-key", model="test-model")
         mock_build.return_value = mock_client
 
         result = await classify_question("Random question")

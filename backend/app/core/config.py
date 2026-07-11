@@ -35,32 +35,34 @@ class Settings(BaseSettings):
     neo4j_password: str | None = None
     neo4j_database: str = "neo4j"
 
-    # Phase 2: embeddings (BAAI/bge-large-en-v1.5 via HuggingFace Inference API)
-    embedding_provider: str = "huggingface"
-    embedding_model: str = "BAAI/bge-large-en-v1.5"
-    hf_api_token: str | None = None
+    # Phase 2: embeddings (Gemini Embedding 2 via Google AI Studio)
+    embedding_provider: str = "google"
+    embedding_model: str = "gemini-embedding-2"
+    google_api_key_embedding: str | None = None
 
     # Phase 2: worker
     worker_concurrency: int = 2
 
-    # Phase 3: OpenRouter LLM client
-    agent_llm_provider: str = "openrouter"
-    agent_llm_model: str = "google/gemma-4-31b-it:free"
+    # Phase 3: Google AI Studio (Gemini) LLM client — migrated from OpenRouter,
+    # see decisions.md 2026-07-10.
+    agent_llm_provider: str = "google"
+    agent_llm_model: str = "gemma-4-31b-it"
     # Escalation model tried on the same key once agent_llm_model keeps 429ing.
-    agent_llm_model_fallback: str = "google/gemma-4-26b-a4b-it:free"
-    openrouter_api_key_supervisor: str | None = None
-    openrouter_api_key_security: str | None = None
-    openrouter_api_key_performance: str | None = None
-    openrouter_api_key_complexity: str | None = None
-    openrouter_api_key_duplication: str | None = None
-    openrouter_api_key_reliability: str | None = None
-    # Optional second key per specialist agent. If set, tried (with both models
-    # above) after the primary key exhausts its own rate-limit retries.
-    openrouter_api_key_security_fallback: str | None = None
-    openrouter_api_key_performance_fallback: str | None = None
-    openrouter_api_key_complexity_fallback: str | None = None
-    openrouter_api_key_duplication_fallback: str | None = None
-    openrouter_api_key_reliability_fallback: str | None = None
+    agent_llm_model_fallback: str = "gemma-4-26b-a4b-it"
+
+    # Google AI Studio (Gemini) — migrated from OpenRouter, see decisions.md 2026-07-10
+    google_api_key_supervisor: str | None = None
+    google_api_key_security: str | None = None
+    google_api_key_performance: str | None = None
+    google_api_key_complexity: str | None = None
+    google_api_key_duplication: str | None = None
+    google_api_key_reliability: str | None = None
+    google_api_key_security_fallback: str | None = None
+    google_api_key_performance_fallback: str | None = None
+    google_api_key_complexity_fallback: str | None = None
+    google_api_key_duplication_fallback: str | None = None
+    google_api_key_reliability_fallback: str | None = None
+    google_api_key_chatbot: str | None = None
     agent_max_retries: int = 2
     agent_timeout_seconds: int = 120
     langgraph_recursion_limit: int = 50
@@ -68,7 +70,7 @@ class Settings(BaseSettings):
     max_findings_per_agent: int = 20
 
     # Phase 4: Report generation & RAG chatbot
-    openrouter_api_key_chatbot: str | None = None
+    # google_api_key_chatbot is defined above in the Phase 3 Google AI block.
     qdrant_collection_agent_findings: str = "agent_findings"
     qdrant_collection_scan_reports: str = "scan_reports"
 

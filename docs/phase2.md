@@ -1642,9 +1642,13 @@ NEO4J_PASSWORD=
 NEO4J_DATABASE=neo4j
 
 # Embeddings
-EMBEDDING_PROVIDER=openai
-EMBEDDING_MODEL=text-embedding-3-small
-OPENAI_API_KEY=
+# Superseded (see decisions.md 2026-07-10 "embedding model switched to Google
+# AI Studio" entry): OpenAI was never actually implemented; the real
+# implementation used HuggingFace first, then Google AI Studio's Gemini
+# Embedding 2 model.
+EMBEDDING_PROVIDER=google
+EMBEDDING_MODEL=gemini-embedding-2
+GOOGLE_API_KEY_EMBEDDING=
 
 # Worker
 WORKER_CONCURRENCY=2

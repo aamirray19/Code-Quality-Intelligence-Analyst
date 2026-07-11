@@ -3,6 +3,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.types import Send
 
 from app.core.config import settings
+from app.workflows.analysis.agents.agent_factory import reset_llm_semaphore
 from app.workflows.analysis.agents.complexity_agent import complexity_agent
 from app.workflows.analysis.agents.duplication_agent import duplication_agent
 from app.workflows.analysis.agents.performance_agent import performance_agent
@@ -99,6 +100,11 @@ def get_compiled_graph():
 async def run_analysis(scan_id) -> dict:
     """Single entrypoint for Phase 3, invoked by repo_scan_worker.py right
     after a scan is marked `parsed` (Option A same-worker trigger)."""
+    # repo_scan_worker.py invokes this via a fresh asyncio.run() per scan, so
+    # every call gets its own new event loop -- rebind the agent concurrency
+    # semaphore to it before any agent touches it. See
+    # agent_factory.reset_llm_semaphore for why this is required.
+    reset_llm_semaphore()
     graph = get_compiled_graph()
     initial_state: AnalysisState = {"scan_id": str(scan_id), "raw_findings": [], "errors": []}
     return await graph.ainvoke(

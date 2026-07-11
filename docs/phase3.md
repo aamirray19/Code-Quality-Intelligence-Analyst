@@ -1485,9 +1485,28 @@ NEO4J_PASSWORD=
 NEO4J_DATABASE=neo4j
 
 # Agent LLM
-AGENT_LLM_PROVIDER=deepseek
-AGENT_LLM_MODEL=deepseek-reasoner
-DEEPSEEK_API_KEY=
+# Superseded again (see decisions.md 2026-07-10 "Google AI Studio migration"
+# entry): the agent/supervisor/chatbot LLM provider is Google AI Studio
+# (Gemini), not OpenRouter. Free-tier rate limits apply per Google Cloud
+# project, not per API key — separate GOOGLE_API_KEY_* values only give real
+# fallback headroom if each key comes from a different GCP project.
+AGENT_LLM_PROVIDER=google
+AGENT_LLM_MODEL=gemma-4-31b-it
+AGENT_LLM_MODEL_FALLBACK=gemma-4-26b-a4b-it
+GOOGLE_API_KEY_SUPERVISOR=
+GOOGLE_API_KEY_SECURITY=
+GOOGLE_API_KEY_PERFORMANCE=
+GOOGLE_API_KEY_COMPLEXITY=
+GOOGLE_API_KEY_DUPLICATION=
+GOOGLE_API_KEY_RELIABILITY=
+# Optional second key per specialist agent (security/performance/complexity/
+# duplication/reliability only), tried after the primary key exhausts its
+# own rate-limit retries on both models above.
+GOOGLE_API_KEY_SECURITY_FALLBACK=
+GOOGLE_API_KEY_PERFORMANCE_FALLBACK=
+GOOGLE_API_KEY_COMPLEXITY_FALLBACK=
+GOOGLE_API_KEY_DUPLICATION_FALLBACK=
+GOOGLE_API_KEY_RELIABILITY_FALLBACK=
 
 # LangGraph
 LANGGRAPH_RECURSION_LIMIT=50

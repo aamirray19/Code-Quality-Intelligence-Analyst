@@ -69,7 +69,7 @@ async def test_full_graph_run_reaches_analyzed_status():
         patch(f"{MODULE_FACTORY}._mark_task_running"),
         patch(f"{MODULE_FACTORY}._mark_task_completed"),
         patch(f"{MODULE_FACTORY}._record_agent_run"),
-        patch(f"{MODULE_FACTORY}.OpenRouterClient", return_value=fake_llm),
+        patch(f"{MODULE_FACTORY}.GoogleAIClient", return_value=fake_llm),
         patch(f"{MODULE_NORMALIZE}.supabase_metadata_tool.find_file_by_path", return_value=None),
         patch(f"{MODULE_NORMALIZE}.scan_event_service.create_event"),
         patch(f"{MODULE_PERSIST}.scan_event_service.create_event"),

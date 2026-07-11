@@ -5,7 +5,7 @@ import re
 from app.schemas.chat import ChatMessageRecord
 from app.services.chat_session_service import append_message
 from app.services.graph_context_service import get_context_for_file
-from app.services.openrouter_client import build_llm_client
+from app.services.google_ai_client import build_llm_client
 from app.services.rag_retrieval_service import retrieve_relevant_docs
 from app.services.source_builder_service import build_context_block
 

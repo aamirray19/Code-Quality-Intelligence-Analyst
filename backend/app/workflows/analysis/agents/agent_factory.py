@@ -6,10 +6,10 @@ from datetime import datetime, timezone
 from app.core.config import settings
 from app.core.errors import AppError
 from app.schemas.agent_output import AgentOutputList
-from app.services.openrouter_client import (
+from app.services.google_ai_client import (
     AGENT_KEY_ATTR,
     RATE_LIMIT_BACKOFF_SECONDS,
-    OpenRouterClient,
+    GoogleAIClient,
 )
 from app.workflows.analysis.tools import neo4j_graph_tool, supabase_metadata_tool
 
@@ -17,15 +17,15 @@ from app.workflows.analysis.tools import neo4j_graph_tool, supabase_metadata_too
 # fallback requested for those). Tried only once the primary key exhausts its
 # own rate-limit retries on both models.
 FALLBACK_KEY_ATTR = {
-    "security": "openrouter_api_key_security_fallback",
-    "performance": "openrouter_api_key_performance_fallback",
-    "complexity": "openrouter_api_key_complexity_fallback",
-    "duplication": "openrouter_api_key_duplication_fallback",
-    "reliability": "openrouter_api_key_reliability_fallback",
+    "security": "google_api_key_security_fallback",
+    "performance": "google_api_key_performance_fallback",
+    "complexity": "google_api_key_complexity_fallback",
+    "duplication": "google_api_key_duplication_fallback",
+    "reliability": "google_api_key_reliability_fallback",
 }
 
 # _gather_context's Supabase/Neo4j reads run inside the same shared semaphore
-# turn as the LLM call but aren't HTTP-retried by openrouter_client, so a
+# turn as the LLM call but aren't HTTP-retried by google_ai_client, so a
 # transient WinError 10035 there needs its own small retry.
 CONTEXT_READ_RETRIES = 2
 CONTEXT_READ_RETRY_DELAY_SECONDS = 1
@@ -73,10 +73,27 @@ RESPONSE_FORMAT_INSTRUCTIONS = (
 # simultaneous httpx.AsyncClient connections on Windows' default
 # ProactorEventLoop reliably trips WinError 10035 (WSAEWOULDBLOCK) when a
 # wait_for timeout races a live overlapped socket op. Capping concurrent
-# OpenRouter calls keeps the burst small enough to avoid it; SimpleWorker
-# processes one job at a time on Windows so a module-level semaphore is safe.
+# LLM calls keeps the burst small enough to avoid it; SimpleWorker
+# processes one job at a time on Windows so a module-level semaphore is safe
+# *within one event loop* -- see reset_llm_semaphore below for why it can't
+# just be constructed once here.
 AGENT_LLM_CONCURRENCY_LIMIT = 2
 _llm_semaphore = asyncio.Semaphore(AGENT_LLM_CONCURRENCY_LIMIT)
+
+
+def reset_llm_semaphore() -> None:
+    """Rebind the module-level semaphore to the current event loop.
+
+    repo_scan_worker.py calls `asyncio.run(run_analysis(scan_id))` fresh per
+    scan; each call gets its own new event loop. A single asyncio.Semaphore
+    instance created once at import time binds to whichever loop first uses
+    it and then raises "is bound to a different event loop" on every
+    subsequent scan processed by the same long-lived RQ worker process.
+    graph.run_analysis calls this once at the start of every run so the
+    semaphore is always fresh for the loop actually running it.
+    """
+    global _llm_semaphore
+    _llm_semaphore = asyncio.Semaphore(AGENT_LLM_CONCURRENCY_LIMIT)
 
 
 def _gather_context(scan_id: str, task: dict) -> dict:
@@ -224,7 +241,7 @@ async def run_agent(agent_name: str, worker_input: dict) -> dict:
     The whole turn (Supabase/Neo4j reads, the LLM call, and bookkeeping
     writes) runs under a shared semaphore: all 5 agents fire concurrently via
     LangGraph's Send fan-out, and bursting 5 agents' worth of unthrottled
-    concurrent I/O (async OpenRouter connections *and* threaded calls into
+    concurrent I/O (async Google AI connections *and* threaded calls into
     the single shared synchronous Supabase client) reliably trips WinError
     10035 (WSAEWOULDBLOCK) on Windows' default ProactorEventLoop. Capping how
     many agents are ever mid-turn at once keeps the burst small enough to
@@ -234,7 +251,7 @@ async def run_agent(agent_name: str, worker_input: dict) -> dict:
     scan_id = worker_input["scan_id"]
     task = worker_input["task"]
     last_error: str | None = None
-    client: OpenRouterClient | None = None
+    client: GoogleAIClient | None = None
 
     async with _llm_semaphore:
         try:
@@ -246,7 +263,7 @@ async def run_agent(agent_name: str, worker_input: dict) -> dict:
             user_prompt = base_user_prompt
 
             for key, model in _llm_candidates(agent_name):
-                client = OpenRouterClient(
+                client = GoogleAIClient(
                     api_key=key, model=model, timeout_seconds=settings.agent_timeout_seconds
                 )
                 user_prompt = base_user_prompt
@@ -269,7 +286,7 @@ async def run_agent(agent_name: str, worker_input: dict) -> dict:
                             task,
                             "completed",
                             None,
-                            model_provider="openrouter",
+                            model_provider="google",
                             model_name=model,
                             usage=client.last_usage,
                             findings_count=len(findings),
@@ -309,7 +326,7 @@ async def run_agent(agent_name: str, worker_input: dict) -> dict:
                 task,
                 "failed",
                 last_error,
-                model_provider="openrouter",
+                model_provider="google",
                 model_name=getattr(client, "_model", settings.agent_llm_model),
                 usage=getattr(client, "last_usage", None),
             )

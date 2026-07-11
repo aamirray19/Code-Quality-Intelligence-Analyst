@@ -6,10 +6,10 @@ from app.core.config import settings
 from app.core.errors import AppError
 from app.schemas.finding import FindingRecord
 from app.schemas.report import ReportMetrics
-from app.services.openrouter_client import (
+from app.services.google_ai_client import (
     AGENT_KEY_ATTR,
     RATE_LIMIT_BACKOFF_SECONDS,
-    OpenRouterClient,
+    GoogleAIClient,
 )
 
 
@@ -83,7 +83,7 @@ Please generate a comprehensive Markdown report based on this information."""
     last_error: AppError | None = None
 
     for model in models:
-        client = OpenRouterClient(
+        client = GoogleAIClient(
             api_key=api_key, model=model, timeout_seconds=settings.agent_timeout_seconds
         )
         for attempt in range(settings.agent_max_retries + 1):

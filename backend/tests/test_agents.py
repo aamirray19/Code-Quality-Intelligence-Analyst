@@ -62,7 +62,7 @@ async def test_agent_returns_findings_on_valid_llm_response(agent_name, agent_fn
     fake_llm = MagicMock()
     fake_llm.complete = fake_complete
 
-    with patch(f"{MODULE}.OpenRouterClient", return_value=fake_llm), patch(
+    with patch(f"{MODULE}.GoogleAIClient", return_value=fake_llm), patch(
         f"{MODULE}.supabase_metadata_tool.list_chunks", return_value=[]
     ), patch(f"{MODULE}.supabase_metadata_tool.get_symbol_context", return_value=None), patch(
         f"{MODULE}.neo4j_graph_tool.get_symbol_neighbors", return_value=[]
@@ -102,7 +102,7 @@ async def test_agent_records_token_usage_on_success():
     fake_llm.complete = fake_complete
     fake_llm.last_usage = {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
 
-    with patch(f"{MODULE}.OpenRouterClient", return_value=fake_llm), patch(
+    with patch(f"{MODULE}.GoogleAIClient", return_value=fake_llm), patch(
         f"{MODULE}.supabase_metadata_tool.list_chunks", return_value=[]
     ), patch(f"{MODULE}.supabase_metadata_tool.get_symbol_context", return_value=None), patch(
         f"{MODULE}.neo4j_graph_tool.get_symbol_neighbors", return_value=[]
@@ -115,7 +115,7 @@ async def test_agent_records_token_usage_on_success():
     kwargs = record_mock.call_args.kwargs
     assert kwargs["usage"] == {"prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150}
     assert kwargs["findings_count"] == 1
-    assert kwargs["model_provider"] == "openrouter"
+    assert kwargs["model_provider"] == "google"
 
 
 @pytest.mark.asyncio
@@ -126,7 +126,7 @@ async def test_agent_returns_empty_findings_after_exhausted_retries():
     fake_llm = MagicMock()
     fake_llm.complete = failing_complete
 
-    with patch(f"{MODULE}.OpenRouterClient", return_value=fake_llm), patch(
+    with patch(f"{MODULE}.GoogleAIClient", return_value=fake_llm), patch(
         f"{MODULE}.supabase_metadata_tool.list_chunks", return_value=[]
     ), patch(f"{MODULE}.supabase_metadata_tool.get_symbol_context", return_value=None), patch(
         f"{MODULE}.neo4j_graph_tool.get_symbol_neighbors", return_value=[]
@@ -144,3 +144,19 @@ async def test_agent_returns_empty_findings_after_exhausted_retries():
     failed_mock.assert_called_once()
     record_mock.assert_called_once()
     log_mock.assert_called_once()
+
+
+def test_reset_llm_semaphore_rebinds_to_a_fresh_semaphore():
+    """A single asyncio.Semaphore created once at import time binds to
+    whichever event loop first uses it. repo_scan_worker.py calls
+    asyncio.run(run_analysis(...)) fresh per scan (a new loop each time), so
+    reset_llm_semaphore must hand back a brand-new Semaphore object each call
+    -- reusing the old one across scans raises "is bound to a different
+    event loop" on the second scan processed by the same worker process."""
+    from app.workflows.analysis.agents import agent_factory
+
+    first = agent_factory._llm_semaphore
+    agent_factory.reset_llm_semaphore()
+    second = agent_factory._llm_semaphore
+
+    assert first is not second

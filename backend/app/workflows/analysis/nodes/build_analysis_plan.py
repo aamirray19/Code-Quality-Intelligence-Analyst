@@ -4,7 +4,7 @@ import json
 
 from app.core.config import settings
 from app.schemas.analysis_task import AnalysisTaskRecord
-from app.services.openrouter_client import build_llm_client
+from app.services.google_ai_client import build_llm_client
 from app.workflows.analysis.state import AnalysisState, AnalysisTask
 from app.workflows.analysis.tools import supabase_metadata_tool
 

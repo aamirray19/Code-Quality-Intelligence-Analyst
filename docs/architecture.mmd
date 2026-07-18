@@ -1,0 +1,96 @@
+flowchart TD
+    User[("User")]
+    FE["Frontend<br/>React + Vite"]
+
+    User --> FE
+
+    subgraph API["Backend API (FastAPI)"]
+        ScansAPI["POST /scans<br/>GET /scans/:id"]
+        ReportAPI["GET /scans/:id/report<br/>GET /scans/:id/findings"]
+        ChatAPI["POST /scans/:id/chat"]
+    end
+
+    FE -->|"submit GitHub URL"| ScansAPI
+    FE -->|"poll status"| ScansAPI
+    FE -->|"view report"| ReportAPI
+    FE -->|"ask questions"| ChatAPI
+
+    GH[("GitHub")]
+    ScansAPI -->|"validate repo"| GH
+
+    Redis[("Redis Cloud<br/>repo_scan_queue")]
+    ScansAPI -->|"enqueue scan job"| Redis
+
+    subgraph Worker["RQ Worker (same process, phases run in sequence)"]
+        direction TB
+
+        subgraph Phase2["Phase 2 — Ingest"]
+            Clone["Clone repo"] --> Discover["Discover & filter files"]
+            Discover --> Parse["Tree-sitter parse"]
+            Parse --> Symbols["Extract symbols"]
+            Symbols --> Chunk["Build chunks"]
+            Chunk --> Embed["Generate embeddings"]
+        end
+
+        subgraph Phase3["Phase 3 — Analyze (LangGraph)"]
+            direction TB
+            Supervisor["Supervisor<br/>build scoped plan"]
+            Supervisor --> Security["Security Agent"]
+            Supervisor --> Performance["Performance Agent"]
+            Supervisor --> Complexity["Complexity Agent"]
+            Supervisor --> Duplication["Duplication Agent"]
+            Supervisor --> Reliability["Reliability Agent"]
+            Security --> Normalize["Normalize"]
+            Performance --> Normalize
+            Complexity --> Normalize
+            Duplication --> Normalize
+            Reliability --> Normalize
+            Normalize --> Dedupe["Deduplicate"]
+            Dedupe --> Rank["Rank by severity"]
+        end
+
+        subgraph Phase4["Phase 4 — Report"]
+            Metrics["Compute metrics & risk score"] --> Report["Build Markdown/JSON report"]
+        end
+
+        Phase2 --> Phase3
+        Phase3 --> Phase4
+    end
+
+    Redis -->|"consume job"| Clone
+
+    Supabase[("Supabase (Postgres)<br/>scans, files, symbols, chunks,<br/>findings, reports, chat")]
+    Qdrant[("Qdrant Cloud<br/>code_chunks, agent_findings,<br/>scan_reports")]
+    Neo4j[("Neo4j Aura<br/>code graph")]
+    GoogleAI[("Google AI Studio<br/>Gemma LLM + embeddings")]
+
+    Discover -.->|"file metadata"| Supabase
+    Symbols -.->|"symbol metadata"| Supabase
+    Chunk -.->|"chunk metadata"| Supabase
+    Embed -.->|"vectors"| Qdrant
+    Embed -.->|"embed request"| GoogleAI
+    Symbols -.->|"graph nodes/edges"| Neo4j
+
+    Security -.->|"retrieve context"| Qdrant
+    Security -.->|"retrieve context"| Neo4j
+    Security -.->|"retrieve context"| Supabase
+    Performance -.-> Qdrant
+    Complexity -.-> Supabase
+    Duplication -.-> Qdrant
+    Reliability -.-> Neo4j
+
+    Supervisor -.->|"LLM call"| GoogleAI
+    Security -.->|"LLM call"| GoogleAI
+    Performance -.->|"LLM call"| GoogleAI
+    Complexity -.->|"LLM call"| GoogleAI
+    Duplication -.->|"LLM call"| GoogleAI
+    Reliability -.->|"LLM call"| GoogleAI
+
+    Rank -->|"persist findings"| Supabase
+    Report -->|"store report"| Supabase
+    Report -->|"embed summary"| Qdrant
+
+    ChatAPI -->|"classify + retrieve"| Qdrant
+    ChatAPI -->|"graph context"| Neo4j
+    ChatAPI -->|"metadata + history"| Supabase
+    ChatAPI -->|"LLM call"| GoogleAI

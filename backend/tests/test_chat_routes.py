@@ -144,7 +144,7 @@ def test_create_chat_message_scan_not_found():
 def test_create_chat_message_session_not_found():
     scan_id = uuid4()
     session_id = uuid4()
-    scan_record = _sample_scan_record(scan_id, status="analyzed")
+    scan_record = _sample_scan_record(scan_id, status="reported")
 
     with patch("app.api.routes.chat.scan_service.get_scan", return_value=scan_record), \
          patch("app.api.routes.chat.chat_session_service.get_session", return_value=None):
@@ -161,7 +161,7 @@ def test_create_chat_message_session_scan_mismatch():
     scan_id = uuid4()
     other_scan_id = uuid4()
     session_id = uuid4()
-    scan_record = _sample_scan_record(scan_id, status="analyzed")
+    scan_record = _sample_scan_record(scan_id, status="reported")
     session_record = _sample_chat_session_record(session_id, other_scan_id)
 
     with patch("app.api.routes.chat.scan_service.get_scan", return_value=scan_record), \
@@ -179,7 +179,7 @@ def test_create_chat_message_success():
     scan_id = uuid4()
     session_id = uuid4()
     message_id = uuid4()
-    scan_record = _sample_scan_record(scan_id, status="analyzed")
+    scan_record = _sample_scan_record(scan_id, status="reported")
     session_record = _sample_chat_session_record(session_id, scan_id)
     message_record = _sample_chat_message_record(message_id, session_id, role="assistant", content="Answer")
 
@@ -196,6 +196,21 @@ def test_create_chat_message_success():
     assert body["id"] == str(message_id)
     assert body["role"] == "assistant"
     assert body["content"] == "Answer"
+
+
+def test_create_chat_message_scan_not_reported():
+    scan_id = uuid4()
+    session_id = uuid4()
+    scan_record = _sample_scan_record(scan_id, status="analyzed")
+
+    with patch("app.api.routes.chat.scan_service.get_scan", return_value=scan_record):
+        response = client.post(
+            f"/scans/{scan_id}/chat/sessions/{session_id}/messages",
+            json={"content": "Hello"}
+        )
+
+    assert response.status_code == 409
+    assert response.json()["error_code"] == "SCAN_NOT_COMPLETED"
 
 
 # GET /scans/{scan_id}/chat/sessions/{session_id}/messages tests

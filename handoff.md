@@ -518,3 +518,71 @@ Four real bugs found live during Google AI Studio testing and fixed (full reason
 - Deleted: `backend/app/services/openrouter_client.py`, `backend/tests/test_openrouter_client.py`.
 - Modified: `backend/app/core/config.py`, `backend/.env.example`, `backend/.env` (real keys added by user), `backend/app/workflows/analysis/agents/agent_factory.py` (client migration, `reset_llm_semaphore`), `backend/app/workflows/analysis/graph.py` (`reset_llm_semaphore` call), `backend/app/services/report_builder_service.py`, `backend/app/workflows/analysis/nodes/build_analysis_plan.py`, `backend/app/services/chatbot_service.py`, `backend/app/services/embedding_service.py` (full rewrite: HF â†’ Google AI Studio, dimension truncation, L2 normalization), `backend/tests/test_agents.py`, `backend/tests/test_analysis_graph.py`, `backend/tests/test_report_builder_service.py`, `backend/tests/test_chatbot_service.py`, `backend/tests/test_config.py`, `backend/tests/test_embedding_service_embed_text.py` (full rewrite), `docs/phase2.md` (embeddings env var correction), `docs/phase3.md` (model ID correction), `decisions.md` (5 new dated entries).
 - No files committed to git this session (standing no-commit constraint; user commits manually).
+
+---
+
+## Date
+
+- 2026-07-18 09:22 IST
+
+## Currently verified
+
+- Ran the full AGENTS.md required-startup + Definition-of-Done verification workflow, deliberately skipping the e2e / live-credential manual smoke test per explicit user instruction ("skip the e2e tests").
+- Onboarding: read `AGENTS.md`, this `handoff.md` (all entries through 2026-07-10 17:27 IST), `decisions.md`, and `Taskfile.yml`. Current git HEAD is `34d8645` (Google AI Studio LLM client + parallelism fixes); only untracked file is `README.md`.
+- `task install` -> succeeded (backend `uv sync`: 85 packages incl. langgraph 1.2.7; frontend `npm install --legacy-peer-deps`: 482 packages, 0 vulnerabilities).
+- `task backend:test` -> **250 passed**, 3 pre-existing unrelated deprecation warnings (starlette/httpx TestClient; supabase timeout/verify params), 0 failures, 0 errors. Note: this machine did NOT reproduce the "15 pre-existing environment errors" flagged in prior entries (those were machine-specific, e.g. the poisoned `pytest-of-aamir` temp dir) - the suite is fully clean here.
+- `task frontend:build` -> succeeded (`vite build`, 845 modules, ~2.6s; only the pre-existing >500kB chunk-size advisory).
+
+## Changes this session
+
+- None to application/feature code. Verification-only session. Appended this dated evidence entry to `handoff.md`.
+
+## Verification run
+
+- `task install` -> success.
+- `task backend:test` -> **250 passed**, 3 pre-existing warnings, 0 errors.
+- `task frontend:build` -> success.
+- `task frontend:lint` -> **fails: 2 errors + 7 warnings**, ALL pre-existing in shadcn boilerplate under `frontend/src/components/ui/` (confirmed unmodified via `git status`). Errors: `command.tsx:24` + `textarea.tsx:5` (`@typescript-eslint/no-empty-object-type`). Warnings: `react-refresh/only-export-components` in badge/button/form/navigation-menu/sidebar/sonner/toggle. Left untouched per AGENTS.md "do not refactor unrelated code" and the DoD clause tolerating pre-existing issues ("no new errors/warnings beyond pre-existing ones").
+- E2E / live-credential smoke test (`task dev` + real scan) -> **skipped** per explicit user instruction.
+
+## Still broken or unverified
+
+- `task frontend:lint` not clean due to the 2 pre-existing shadcn-boilerplate errors + 7 warnings above (not introduced this session).
+- No live end-to-end smoke test this session (skipped per instruction). All open items from the 2026-07-10 entries remain open (report-gen live completion, timeout-enforcement gap, shared embedding/supervisor/chatbot key, fallback-key tier untested, `list_chunks` ranking, dead `target_chunk_ids`, deployment).
+
+## Next section
+
+- If a clean `task frontend:lint` is wanted, convert the 2 empty `interface X extends Y {}` to `type X = Y` in `frontend/src/components/ui/{command,textarea}.tsx` (generated shadcn files - confirm first) and address the `react-refresh` warnings.
+- Run a live end-to-end smoke test with real credentials when available (AGENTS.md Definition of Done point 3).
+
+## Files changed
+
+- Modified: `handoff.md` (this entry). No backend/frontend code changed.
+
+---
+
+## 2026-07-18 10:56 IST — Phase 4 doc/code alignment (names + chat guard)
+
+**Context:** Follow-up to the 4-phase verification. User asked to align `docs/phase4.md` identifiers to the actual code (name changes only, no logic change), NOT add the `generating_report` intermediate status, but DO add the chat status guard from finding #5.
+
+**Changes this session:**
+- `docs/phase4.md` — aligned identifiers to code (no code logic implied):
+  - DB table `scan_reports` -> `reports`; columns `overall_risk/summary/report_json/report_markdown` -> `summary_markdown/metrics/risk_score` (matches 0001_init.sql:226 + schemas/report.py).
+  - Terminal status `completed` -> `reported`; Phase 4 failure `failed` -> `report_failed` (matches pipeline.py:110,42).
+  - Removed the non-existent `generating_report` intermediate status from flow diagrams/§6 Step 1/§12/§13.
+  - Findings source table `scan_findings` -> `findings` (matches 0001_init.sql:197).
+  - Updated §8.1 report API example + §17 completion criteria + report service outputs to match ReportRecord.
+  - Left Qdrant collection name `scan_reports` (config.py:75) and Step 7/8 report-content design untouched (changing tiered risk -> numeric risk_score would be a logic change).
+- `backend/app/api/routes/chat.py` — added guard in create_chat_message: `scan.status != "reported"` -> AppError SCAN_NOT_COMPLETED (409). Matches phase4.md §7.2.
+- `backend/app/core/errors.py` — corrected SCAN_NOT_ANALYZED / SCAN_NOT_COMPLETED docstrings.
+- `backend/tests/test_chat_routes.py` — updated 3 message tests to status="reported"; added test_create_chat_message_scan_not_reported (409).
+
+**Verification run:**
+- `uv run pytest tests/test_chat_routes.py tests/test_chatbot_service.py tests/test_report_routes.py tests/test_findings_routes.py -q` -> 31 passed.
+- `uv run pytest -q` -> 251 passed, 3 pre-existing warnings, 0 errors.
+
+**Still broken/unverified:** Frontend lint still has 2 pre-existing errors + 7 warnings in shadcn ui/ boilerplate (unchanged). E2E skipped per user.
+
+**Next:** none pending; awaiting user direction.
+
+**Files changed:** docs/phase4.md, backend/app/api/routes/chat.py, backend/app/core/errors.py, backend/tests/test_chat_routes.py

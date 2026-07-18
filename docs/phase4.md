@@ -60,7 +60,7 @@ It handles:
 - Generating Markdown report
 - Storing the report in Supabase
 - Embedding report context into Qdrant
-- Marking scan as completed
+- Marking scan as reported
 ```
 
 ### 3.2 RAG Chatbot
@@ -100,8 +100,6 @@ scan.status = analyzed
         ↓
 Worker starts Phase 4
         ↓
-Update scan.status = generating_report
-        ↓
 Fetch all findings from Supabase
         ↓
 Normalize findings
@@ -120,7 +118,7 @@ Store report in Supabase
         ↓
 Embed report summary and findings in Qdrant
         ↓
-Update scan.status = completed
+Update scan.status = reported
         ↓
 Frontend displays report
         ↓
@@ -133,7 +131,7 @@ User interacts with RAG chatbot
 
 ```txt
 Supabase
-scan_findings table
+findings table
         ↓
 Report Generation Service
         ↓
@@ -147,12 +145,12 @@ Report Builder Service
         └── Markdown Report
         ↓
 Supabase
-scan_reports table
+reports table
         ↓
 Qdrant Cloud
 agent_findings + scan_reports collections
         ↓
-scan.status = completed
+scan.status = reported
         ↓
 Next.js Frontend
         ↓
@@ -173,20 +171,9 @@ Worker receives scan_id
 Fetch scan from Supabase
         ↓
 Check scan.status == analyzed
-        ↓
-Update scan.status = generating_report
 ```
 
-If the scan is not in the `analyzed` state, the worker should stop execution.
-
-Example status update:
-
-```sql
-update scans
-set status = 'generating_report',
-    updated_at = now()
-where id = '<scan_id>';
-```
+If the scan is not in the `analyzed` state, the worker should stop execution. The scan remains in the `analyzed` state throughout report generation; there is no intermediate `generating_report` status.
 
 ---
 
@@ -196,7 +183,7 @@ The worker fetches all findings created by the LangGraph agents in Phase 3.
 
 ```txt
 Supabase
-scan_findings
+findings
         ↓
 Fetch all findings where scan_id = current scan
 ```
@@ -522,18 +509,17 @@ Example Markdown report:
 
 The final report should be stored in a dedicated table.
 
-Table: `scan_reports`
+Table: `reports`
 
 ```sql
-create table scan_reports (
+create table reports (
   id uuid primary key default gen_random_uuid(),
-  scan_id uuid references scans(id) on delete cascade,
-  overall_risk text not null,
-  summary jsonb not null,
-  report_json jsonb not null,
-  report_markdown text not null,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  scan_id uuid not null references scans(id) on delete cascade,
+  summary_markdown text not null,
+  metrics jsonb not null default '{}',
+  risk_score numeric not null,
+  created_at timestamptz not null default now(),
+  unique(scan_id)
 );
 ```
 
@@ -542,7 +528,7 @@ Each scan should have one final report.
 Recommended uniqueness constraint:
 
 ```sql
-alter table scan_reports
+alter table reports
 add constraint unique_scan_report unique (scan_id);
 ```
 
@@ -596,19 +582,19 @@ Example Qdrant payload:
 
 ---
 
-### Step 12 — Mark Scan as Completed
+### Step 12 — Mark Scan as Reported
 
 After the report and embeddings are successfully stored:
 
 ```txt
-Update scan.status = completed
+Update scan.status = reported
 ```
 
 Example:
 
 ```sql
 update scans
-set status = 'completed',
+set status = 'reported',
     updated_at = now()
 where id = '<scan_id>';
 ```
@@ -619,10 +605,10 @@ At this point, the frontend can display the final report.
 
 ## 7. RAG Chatbot Flow
 
-The chatbot becomes available only after the scan is completed.
+The chatbot becomes available only after the scan is reported.
 
 ```txt
-scan.status = completed
+scan.status = reported
         ↓
 RAG chatbot enabled
 ```
@@ -669,7 +655,7 @@ POST /scans/{scan_id}/chat
         ↓
 Validate scan exists
         ↓
-Check scan.status == completed
+Check scan.status == reported
         ↓
 Create or reuse chat session
         ↓
@@ -858,12 +844,17 @@ Example response:
 
 ```json
 {
+  "id": "uuid",
   "scan_id": "uuid",
-  "status": "completed",
-  "overall_risk": "High",
-  "summary": {},
-  "report_json": {},
-  "report_markdown": ""
+  "summary_markdown": "",
+  "metrics": {
+    "total_findings": 42,
+    "by_severity": {},
+    "by_agent": {},
+    "files_affected": 8
+  },
+  "risk_score": 72.5,
+  "created_at": "timestamp"
 }
 ```
 
@@ -956,20 +947,19 @@ Example response:
 
 ## 9. Required Supabase Tables
 
-### 9.1 `scan_reports`
+### 9.1 `reports`
 
 Stores the generated report.
 
 ```sql
-create table scan_reports (
+create table reports (
   id uuid primary key default gen_random_uuid(),
-  scan_id uuid references scans(id) on delete cascade,
-  overall_risk text not null,
-  summary jsonb not null,
-  report_json jsonb not null,
-  report_markdown text not null,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
+  scan_id uuid not null references scans(id) on delete cascade,
+  summary_markdown text not null,
+  metrics jsonb not null default '{}',
+  risk_score numeric not null,
+  created_at timestamptz not null default now(),
+  unique(scan_id)
 );
 ```
 
@@ -1057,10 +1047,9 @@ Input:
 - normalized findings
 
 Output:
-- report_json
-- report_markdown
-- summary metrics
-- overall risk
+- summary_markdown
+- metrics
+- risk_score
 ```
 
 ### `finding_normalization_service.py`
@@ -1180,8 +1169,6 @@ Fetch scan metadata
         ↓
 Validate scan.status == analyzed
         ↓
-Update status = generating_report
-        ↓
 Fetch findings
         ↓
 Normalize findings
@@ -1202,13 +1189,13 @@ Store scan report in Supabase
         ↓
 Store report context in Qdrant
         ↓
-Update status = completed
+Update status = reported
 ```
 
 If any step fails:
 
 ```txt
-Update scan.status = failed
+Update scan.status = report_failed
 Store error_message
 Stop execution
 ```
@@ -1236,9 +1223,7 @@ analyzing
   ↓
 analyzed
   ↓
-generating_report
-  ↓
-completed
+reported
 ```
 
 Failure can happen at any point:
@@ -1251,12 +1236,12 @@ failed
 
 ## 14. Frontend Flow
 
-After the scan is completed:
+After the scan is reported:
 
 ```txt
 Frontend polls GET /scans/{scan_id}
         ↓
-Receives status = completed
+Receives status = reported
         ↓
 Frontend calls GET /scans/{scan_id}/report
         ↓
@@ -1352,10 +1337,10 @@ Phase 4 must not:
 Phase 4 is complete when:
 
 ```txt
-- scan.status is completed
-- scan_reports row exists for the scan
-- report_json is available
-- report_markdown is available
+- scan.status is reported
+- reports row exists for the scan
+- summary_markdown is available
+- metrics are available
 - findings are ranked by severity
 - report/finding summaries are embedded in Qdrant
 - frontend can display the report

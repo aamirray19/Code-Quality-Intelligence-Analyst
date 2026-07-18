@@ -81,12 +81,21 @@ async def create_chat_message(
 
     Raises:
         AppError: SCAN_NOT_FOUND (404) if scan doesn't exist
+        AppError: SCAN_NOT_COMPLETED (409) if the report hasn't been generated yet
         AppError: CHAT_SESSION_NOT_FOUND (404) if session doesn't exist or scan_id mismatch
     """
     # Check scan exists
     scan = scan_service.get_scan(scan_id)
     if scan is None:
         raise AppError("SCAN_NOT_FOUND", "Scan not found.", 404)
+
+    # Check the report has been generated (chatbot is available only after Phase 4)
+    if scan.status != "reported":
+        raise AppError(
+            "SCAN_NOT_COMPLETED",
+            "Scan report is not ready yet.",
+            409,
+        )
 
     # Check session exists and belongs to the scan
     session = chat_session_service.get_session(session_id)

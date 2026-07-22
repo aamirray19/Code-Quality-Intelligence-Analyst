@@ -1,14 +1,17 @@
 # Code Quality Intelligence Analyst
 
-## 1. Overview
+## Overview
 
 Code Quality Intelligence Analyst takes a public GitHub repository URL and turns it into a deep, actionable code-quality report. It clones and parses the codebase, builds a semantic and structural index of it, runs five specialized AI agents over it to find security, performance, complexity, duplication, and reliability issues, and produces a ranked report you can explore — including a RAG chatbot that answers questions about the scanned repo, grounded in its own code and findings.
 
-## 2. Demo Video
+<!--
+## Demo Video
 
 > _Demo video link goes here._
+-->
 
-## 3. Features
+
+## Features
 
 - **Scan any public GitHub repo** by pasting its URL — no setup on the target repo required.
 - **Automatic repo validation** — existence, visibility, size limit, and branch checks before a scan is accepted.
@@ -21,7 +24,7 @@ Code Quality Intelligence Analyst takes a public GitHub repository URL and turns
 - **RAG chatbot** for the scanned repo — ask about specific files, findings, or fix priorities and get answers grounded in real retrieved context.
 - **Live scan progress** — inline status polling from "queued" through "reported," no page reload required.
 
-## 4. Architecture
+## Architecture
 
 ```mermaid
 flowchart TD
@@ -122,7 +125,7 @@ flowchart TD
     ChatAPI -->|"LLM call"| GoogleAI
 ```
 
-## 5. Tech Stack
+## Tech Stack
 
 | Layer | Technology |
 |---|---|
@@ -139,7 +142,7 @@ flowchart TD
 | Frontend styling | Tailwind CSS, shadcn/ui |
 | Task orchestration | Task (`Taskfile.yml`) |
 
-## 6. Challenges and Solutions
+## Challenges and Solutions
 
 | Challenge | Problem | Solution | Impact |
 |---|---|---|---|
@@ -151,7 +154,7 @@ flowchart TD
 | Silently stuck scans | An uncaught exception during analysis left a scan stuck at `parsed` forever with no visible error | Explicit `analysis_failed` status + scan event on any uncaught exception | Failures are now visible to the frontend instead of hanging indefinitely |
 | Oversized supervisor context | Feeding the full repo structure (all files/symbols/imports) to the planning LLM risked blowing the context window on large repos | Capped structural metadata to the top ~500 symbols by LOC, with a note that more exist | Supervisor planning scales to large repos without context overflow |
 
-## 7. Best Practices and Conventions Used
+## Best Practices and Conventions Used
 
 | Practice | What | Why |
 |---|---|---|
@@ -164,7 +167,7 @@ flowchart TD
 | Session handoff log | `handoff.md` records verified state, changes, and next steps at the end of every session | Gives continuity across sessions without relying on memory |
 | Test-first development | Features are implemented test-first and independently reviewed before being considered done | Catches regressions and spec drift early rather than at integration time |
 
-## 8. Future Improvements
+## Future Improvements
 
 - Move agent analysis onto its own `analysis_queue` so parsing/indexing and agent analysis can scale independently.
 - Extend parsing support beyond Python/JS/TS to more languages (Go, Rust, Java, etc.).
